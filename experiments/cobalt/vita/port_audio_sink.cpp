@@ -63,9 +63,9 @@ void dump_block(const int16_t* pcm, int index) {
   if (!g_dump_checked) {
     g_dump_checked = true;
     SceIoStat st;
-    if (sceIoGetstat("ux0:data/youtubevita/verbose.txt", &st) >= 0) {
+    if (sceIoGetstat("ux0:data/youtubevita-noads/verbose.txt", &st) >= 0) {
       char path[96];
-      snprintf(path, sizeof(path), "ux0:data/youtubevita/audio_dump_%d.raw", index);
+      snprintf(path, sizeof(path), "ux0:data/youtubevita-noads/audio_dump_%d.raw", index);
       g_dump = sceIoOpen(path, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
     }
   }

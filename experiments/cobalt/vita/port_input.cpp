@@ -4,7 +4,7 @@
  * through the registered Cobalt event handler. Button mapping lives in
  * pad_adapter.cpp (Starboard gamepad keys, as on other console ports).
  *
- * DIAGNOSTIC AUTOMATION: ux0:data/youtubevita/input_script.txt, if present,
+ * DIAGNOSTIC AUTOMATION: ux0:data/youtubevita-noads/input_script.txt, if present,
  * lists "<seconds> <button>" lines; each is a press+release injected through
  * the same path as physical buttons, so Vita3K runs can navigate unattended.
  * Without that file only the physical controller is used.
@@ -168,7 +168,7 @@ uint32_t button_by_name(const char* n) {
 }
 void load_script() {
   g_script_loaded = true;
-  int fd = sceIoOpen("ux0:data/youtubevita/input_script.txt", SCE_O_RDONLY, 0);
+  int fd = sceIoOpen("ux0:data/youtubevita-noads/input_script.txt", SCE_O_RDONLY, 0);
   if (fd < 0) return;
   static char buf[2048];
   int n = sceIoRead(fd, buf, sizeof(buf) - 1);

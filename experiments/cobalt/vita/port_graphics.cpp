@@ -591,7 +591,7 @@ void dump_frame(int n) {
   if (!rgba) return;
   ::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
   char path[96];
-  snprintf(path, sizeof(path), "ux0:data/youtubevita/frame_%04d.ppm", n);
+  snprintf(path, sizeof(path), "ux0:data/youtubevita-noads/frame_%04d.ppm", n);
   int fd = sceIoOpen(path, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
   if (fd >= 0) {
     char hdr[32];
@@ -1067,18 +1067,18 @@ void ytv_gl_shader_source(GLuint shader, GLsizei count,
   }
   merged[w] = 0;
   if (removed) __sync_add_and_fetch(&g_pragmas_removed, removed);
-  // DIAGNOSTIC: ux0:data/youtubevita/dump_shaders.txt writes every distinct
-  // shader source to ux0:data/youtubevita/shaders/<n>.glsl.
+  // DIAGNOSTIC: ux0:data/youtubevita-noads/dump_shaders.txt writes every distinct
+  // shader source to ux0:data/youtubevita-noads/shaders/<n>.glsl.
   {
     static int enabled = -1, n = 0;
     if (enabled < 0) {
       SceIoStat st;
-      enabled = sceIoGetstat("ux0:data/youtubevita/dump_shaders.txt", &st) >= 0;
-      if (enabled) sceIoMkdir("ux0:data/youtubevita/shaders", 0777);
+      enabled = sceIoGetstat("ux0:data/youtubevita-noads/dump_shaders.txt", &st) >= 0;
+      if (enabled) sceIoMkdir("ux0:data/youtubevita-noads/shaders", 0777);
     }
     if (enabled && n < 400) {
       char path[96];
-      snprintf(path, sizeof(path), "ux0:data/youtubevita/shaders/%03d.glsl", n++);
+      snprintf(path, sizeof(path), "ux0:data/youtubevita-noads/shaders/%03d.glsl", n++);
       SceUID fd = sceIoOpen(path, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
       if (fd >= 0) { sceIoWrite(fd, merged, (SceSize)w); sceIoClose(fd); }
     }

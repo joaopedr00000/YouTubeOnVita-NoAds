@@ -2,12 +2,12 @@
  * YouTubeVita: optional, native cobalt.tools media download.
  * Not Google Cobalt (the browser engine). No JavaScript or YouTube UI patch.
  *
- * Configuration: ux0:data/youtubevita/download.cfg
+ * Configuration: ux0:data/youtubevita-noads/download.cfg
  *   api=https://YOUR-AUTHORIZED-COBALT-API/
  *   key=OPTIONAL_API_KEY
  *   quality=480   (360/480/720)
  *   mode=video    (video/audio)
- * Media URL: ux0:data/youtubevita/download_request.txt (one YouTube watch URL).
+ * Media URL: ux0:data/youtubevita-noads/download_request.txt (one YouTube watch URL).
  * Access only media you own or are authorized to save.
  */
 #include <curl/curl.h>
@@ -23,10 +23,10 @@
 #include <cctype>
 
 namespace {
-constexpr const char* kRoot = "ux0:data/youtubevita";
-constexpr const char* kDir = "ux0:data/youtubevita/downloads";
-constexpr const char* kConfig = "ux0:data/youtubevita/download.cfg";
-constexpr const char* kRequest = "ux0:data/youtubevita/download_request.txt";
+constexpr const char* kRoot = "ux0:data/youtubevita-noads";
+constexpr const char* kDir = "ux0:data/youtubevita-noads/downloads";
+constexpr const char* kConfig = "ux0:data/youtubevita-noads/download.cfg";
+constexpr const char* kRequest = "ux0:data/youtubevita-noads/download_request.txt";
 constexpr const char* kCaFile = "app0:cacert.pem";
 pthread_mutex_t s_lock = PTHREAD_MUTEX_INITIALIZER;
 int s_running = 0;
@@ -89,7 +89,7 @@ bool config(Settings& cfg) {
   // Keep API host/key private in download.cfg and never rewrite them.
   // A missing native setting means the API config's own value still applies.
   char native[256] = {};
-  SceUID nfd = sceIoOpen("ux0:data/youtubevita/addons.cfg", SCE_O_RDONLY, 0);
+  SceUID nfd = sceIoOpen("ux0:data/youtubevita-noads/addons.cfg", SCE_O_RDONLY, 0);
   if (nfd >= 0) {
     int got = sceIoRead(nfd, native, sizeof(native) - 1);
     sceIoClose(nfd);

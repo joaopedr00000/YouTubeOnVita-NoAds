@@ -57,13 +57,13 @@ bool ytv_vita_lifecycle_begin(SbEventHandleCallback callback){
   pthread_mutex_unlock(&mutex);
   // Cobalt command-line bootstrap expects argc>=1 and argv[0]. Optional extra
   // switches (one per line, e.g. --vmodule=...) come from
-  // ux0:data/youtubevita/cobalt_args.txt; nothing is added when it is absent.
+  // ux0:data/youtubevita-noads/cobalt_args.txt; nothing is added when it is absent.
   static char app_name[]="youtubevita";
   static char arg_buffer[2048];
   static char* args[17]={app_name,nullptr};
   int argc=1;
   {
-    int fd=sceIoOpen("ux0:data/youtubevita/cobalt_args.txt",SCE_O_RDONLY,0);
+    int fd=sceIoOpen("ux0:data/youtubevita-noads/cobalt_args.txt",SCE_O_RDONLY,0);
     if(fd>=0){
       int n=sceIoRead(fd,arg_buffer,sizeof(arg_buffer)-1);
       sceIoClose(fd);

@@ -305,7 +305,7 @@ pthread_once_t g_libs_once = PTHREAD_ONCE_INIT;
 // while a >480p player is open; if it is still there at the next start, that
 // run died with 720p playing, so this run stays at 480p (and removes the
 // probe, so the following start tries 720p again).
-constexpr const char* kLite720Probe = "ux0:data/youtubevita/lite720_probe";
+constexpr const char* kLite720Probe = "ux0:data/youtubevita-noads/lite720_probe";
 int g_lite720 = -1;  // -1 unknown, 0 480p max, 1 720p allowed
 bool g_lite720_probe_open = false;
 bool g_video_lib = false, g_audio_lib = false;
@@ -1186,16 +1186,16 @@ int audio_output_thread(SceSize, void* argp) {
   SbPlayer p = *static_cast<SbPlayer*>(argp);
   alignas(64) int16_t block[kAudioGrain * 2];
   int last_volume = -1;
-  // DIAGNOSTIC: with ux0:data/youtubevita/record_audio.txt present, every
+  // DIAGNOSTIC: with ux0:data/youtubevita-noads/record_audio.txt present, every
   // block sent to the audio port is also appended to rec_player.raw
   // (S16 stereo at the stream rate) so recordings of test runs carry the
   // exact PCM the Vita played. Absent the file, nothing is written.
   SceUID rec = -1;
   {
-    SceUID probe = sceIoOpen("ux0:data/youtubevita/record_audio.txt", SCE_O_RDONLY, 0);
+    SceUID probe = sceIoOpen("ux0:data/youtubevita-noads/record_audio.txt", SCE_O_RDONLY, 0);
     if (probe >= 0) {
       sceIoClose(probe);
-      rec = sceIoOpen("ux0:data/youtubevita/rec_player.raw",
+      rec = sceIoOpen("ux0:data/youtubevita-noads/rec_player.raw",
                       SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0666);
     }
   }
@@ -1859,12 +1859,12 @@ void SbPlayerSetBounds(SbPlayer p, int z, int x, int y, int w, int h) {
 bool SbPlayerSetPlaybackRate(SbPlayer p, double rate) {
   if (!p) return false;
   {
-    // DIAGNOSTIC: ux0:data/youtubevita/force_rate.txt ("1.5") replaces normal
+    // DIAGNOSTIC: ux0:data/youtubevita-noads/force_rate.txt ("1.5") replaces normal
     // speed, to test the time stretcher without YouTube's speed menu.
     static double forced = -1.0;
     if (forced < 0.0) {
       forced = 0.0;
-      FILE* f = fopen("ux0:data/youtubevita/force_rate.txt", "r");
+      FILE* f = fopen("ux0:data/youtubevita-noads/force_rate.txt", "r");
       if (f) {
         double v = 0.0;
         if (fscanf(f, "%lf", &v) == 1 && v >= 0.25 && v <= 2.0) forced = v;

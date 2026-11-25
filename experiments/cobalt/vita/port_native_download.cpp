@@ -40,8 +40,8 @@ extern "C" void ytv_addons_download_quality_fallback(int,int);
 #include "port_cover_4x3.h"
 
 namespace {
-constexpr const char* kRoot="ux0:data/youtubevita";
-constexpr const char* kDir="ux0:data/youtubevita/downloads";
+constexpr const char* kRoot="ux0:data/youtubevita-noads";
+constexpr const char* kDir="ux0:data/youtubevita-noads/downloads";
 constexpr const char* kCA="app0:cacert.pem";
 pthread_mutex_t g_mu=PTHREAD_MUTEX_INITIALIZER;
 bool g_running=false;
@@ -446,8 +446,8 @@ bool encode_mp3(const char*input,const char*out,
   bool ok=false;
   const char*phase="mp4-samples";
 #if defined(YTV_NATIVE_MP3_DIAG)
-    SceUID diag_float=sceIoOpen("ux0:data/youtubevita/mp3_frame_float.raw",SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
-    SceUID diag_pcm=sceIoOpen("ux0:data/youtubevita/mp3_swr_s16.raw",SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
+    SceUID diag_float=sceIoOpen("ux0:data/youtubevita-noads/mp3_frame_float.raw",SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
+    SceUID diag_pcm=sceIoOpen("ux0:data/youtubevita-noads/mp3_swr_s16.raw",SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
     int diag_frames=0;
 #endif
   if(!ytv_mp4_parse_audio(in,track))goto cleanup;
@@ -755,7 +755,7 @@ void run(char id[12],bool audio,int quality,const char*artwork){
   if(!resolve(id,source,audio,quality)){curl_global_cleanup();return;}
 #if defined(YTV_NATIVE_DOWNLOAD_TEST)
   SceIoStat force_marker={};
-  if(audio && sceIoGetstat("ux0:data/youtubevita/test_force_progressive.txt",
+  if(audio && sceIoGetstat("ux0:data/youtubevita-noads/test_force_progressive.txt",
                             &force_marker)>=0){
     source.audio_url[0]=0;
     SbLogRaw("YTV_LIFECYCLE_TEST_FORCE_PROGRESSIVE enabled=1\n");

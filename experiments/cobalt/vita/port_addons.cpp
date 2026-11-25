@@ -6,7 +6,7 @@
  *     lets the Vita go to sleep normally.
  *   - Screen off: turns the OLED/LCD off while audio keeps playing; any
  *     button turns it back on.
- *   - Screenshot: saves the current screen as PNG in ux0:picture/YouTubeVita.
+ *   - Screenshot: saves the current screen as PNG in ux0:picture/YouTubeVita-NoAds.
  *
  * Also keeps the Vita from dimming/sleeping while a video plays.
  *
@@ -150,7 +150,7 @@ uint64_t g_shot_at_us = 0;
 uint64_t g_screen_off_at_us = 0;
 bool g_input_locked = false;  // screen and buttons ignored; SELECT unlocks
 bool g_lr_enabled = true;     // L/R reach YouTube (saved in addons.cfg)
-constexpr const char* kAddonCfg = "ux0:data/youtubevita/addons.cfg";
+constexpr const char* kAddonCfg = "ux0:data/youtubevita-noads/addons.cfg";
 bool g_pt = false;  // Portuguese UI (system or user preference)
 
 // The native input thread composes UI while EGL uploads it. Serializing the
@@ -906,11 +906,11 @@ void save_screenshot() {
     }
     if (compress2(z, &zcap, raw, (uLong)(row * h), 3) == Z_OK) {
       sceIoMkdir("ux0:picture", 0777);
-      sceIoMkdir("ux0:picture/YouTubeVita", 0777);
+      sceIoMkdir("ux0:picture/YouTubeVita-NoAds", 0777);
       SceDateTime t;
       memset(&t, 0, sizeof(t));
       sceRtcGetCurrentClockLocalTime(&t);
-      snprintf(path, sizeof(path), "ux0:picture/YouTubeVita/YTV_%04d%02d%02d_%02d%02d%02d.png",
+      snprintf(path, sizeof(path), "ux0:picture/YouTubeVita-NoAds/YTV_%04d%02d%02d_%02d%02d%02d.png",
                (int)t.year, (int)t.month, (int)t.day, (int)t.hour, (int)t.minute, (int)t.second);
       SceUID fd = sceIoOpen(path, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
       if (fd >= 0) {
@@ -1078,12 +1078,12 @@ void update_language() {
 
 void set_timer(int idx) {
   g_timer_idx = (idx + kTimerChoices) % kTimerChoices;
-  // DIAGNOSTIC: ux0:data/youtubevita/addon_timer_seconds.txt counts the timer
+  // DIAGNOSTIC: ux0:data/youtubevita-noads/addon_timer_seconds.txt counts the timer
   // in seconds instead of minutes (tests only).
   static int unit_s = -1;
   if (unit_s < 0) {
     SceIoStat st;
-    unit_s = sceIoGetstat("ux0:data/youtubevita/addon_timer_seconds.txt", &st) >= 0 ? 1 : 60;
+    unit_s = sceIoGetstat("ux0:data/youtubevita-noads/addon_timer_seconds.txt", &st) >= 0 ? 1 : 60;
   }
   g_timer_deadline_us = kTimerMinutes[g_timer_idx]
                             ? now_us() + (uint64_t)kTimerMinutes[g_timer_idx] * unit_s * 1000000ull
@@ -1097,7 +1097,7 @@ void set_timer(int idx) {
 }
 
 void save_cfg() {
-  sceIoMkdir("ux0:data/youtubevita",0777);
+  sceIoMkdir("ux0:data/youtubevita-noads",0777);
   SceUID fd=sceIoOpen(kAddonCfg,SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
   if (fd<0) return;
   char buf[384];
@@ -1255,7 +1255,7 @@ void begin_selected_download(bool mp3){
 #if defined(YTV_NATIVE_DOWNLOAD_TEST)
   // Diagnostic-only override for short reproducible Vita3K downloads.
   char url[128]={};
-  SceUID fd=sceIoOpen("ux0:data/youtubevita/native_test_url.txt",SCE_O_RDONLY,0);
+  SceUID fd=sceIoOpen("ux0:data/youtubevita-noads/native_test_url.txt",SCE_O_RDONLY,0);
   if(fd>=0){
     int n=sceIoRead(fd,url,sizeof(url)-1);
     sceIoClose(fd);
@@ -1629,7 +1629,7 @@ void ytv_addons_tap(float x, float y) {
 // Crash guard v0.60: a persistent probe is armed only while an actual 1080p
 // decoder is being constructed/used. Simply starting and closing the app
 // with Full HD enabled must NEVER trigger the previous-run crash guard.
-constexpr const char* kFhdProbe = "ux0:data/youtubevita/fhd_probe";
+constexpr const char* kFhdProbe = "ux0:data/youtubevita-noads/fhd_probe";
 int g_fhd_state = -1;            // -1 unknown, 0 off, 1 on
 bool g_fhd_auto_off = false;
 int g_fhd_guard_owners = 0;      // players with a Full HD decoder or attempt
@@ -1683,7 +1683,7 @@ void ytv_addons_fhd_begin() {
     pthread_mutex_unlock(&g_fhd_guard_mutex);
     return;
   }
-  sceIoMkdir("ux0:data/youtubevita",0777);
+  sceIoMkdir("ux0:data/youtubevita-noads",0777);
   SceUID fd=sceIoOpen(kFhdProbe,SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
   int wrote=fd>=0?sceIoWrite(fd,kFhdProbeSignature,sizeof(kFhdProbeSignature)-1):-1;
   if(fd>=0)sceIoClose(fd);
@@ -1769,7 +1769,7 @@ void ytv_addons_tick() {
      ytv_native_player_present() && g_ytv_hud_video_h>0){
     test_once=true;
     char input[128]={};
-    SceUID f=sceIoOpen("ux0:data/youtubevita/native_test_url.txt",SCE_O_RDONLY,0);
+    SceUID f=sceIoOpen("ux0:data/youtubevita-noads/native_test_url.txt",SCE_O_RDONLY,0);
     if(f>=0){
       int n=sceIoRead(f,input,sizeof(input)-1);
       sceIoClose(f);
@@ -1781,7 +1781,7 @@ void ytv_addons_tick() {
           const int test_height=g_ytv_hud_video_h;
           SceIoStat force_video={};
           const bool video_480=sceIoGetstat(
-              "ux0:data/youtubevita/test_force_video480.txt",&force_video)>=0;
+              "ux0:data/youtubevita-noads/test_force_video480.txt",&force_video)>=0;
           int test_rc=ytv_native_download_start(!video_480,video_480?480:360);
           char line[155];snprintf(line,sizeof(line),
             "YTV_LIFECYCLE_TEST_DOWNLOAD_AUTOSTART rc=%d mp4_480=%d player_active=%d video_h=%d\n",

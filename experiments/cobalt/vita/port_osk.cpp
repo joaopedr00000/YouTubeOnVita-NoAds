@@ -173,7 +173,7 @@ const CobaltExtensionOnScreenKeyboardApi kApi = {
 };
 
 bool enabled_in_cfg() {
-  SceUID fd = sceIoOpen("ux0:data/youtubevita/addons.cfg", SCE_O_RDONLY, 0);
+  SceUID fd = sceIoOpen("ux0:data/youtubevita-noads/addons.cfg", SCE_O_RDONLY, 0);
   if (fd < 0) return false;  // off unless turned on (beta)
   char buf[256] = {0};
   sceIoRead(fd, buf, sizeof(buf) - 1);

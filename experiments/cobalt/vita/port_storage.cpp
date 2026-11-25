@@ -44,7 +44,7 @@ bool is_open(SbStorageRecord r){
   return false;
 }
 constexpr int64_t max_bytes=8*1024*1024;
-constexpr char dir[]="ux0:data/youtubevita/storage";
+constexpr char dir[]="ux0:data/youtubevita-noads/storage";
 // Record name -> file. Cobalt's record names may contain dots or exceed
 // 64 chars; those used to be rejected, which silently disabled persistence
 // (cookies, localStorage, sign-in). Names are now sanitized ([A-Za-z0-9_-],
@@ -95,9 +95,11 @@ void derive_key(){
   SceKernelOpenPsId id;
   memset(&id,0,sizeof(id));
   if(sceKernelGetOpenPsId(&id)<0)return;
-  unsigned char msg[16+24];
-  memcpy(msg,"YouTubeVita/storage/v1\0\0",24);
-  memcpy(msg+24,id.id,16);
+  // Fork-specific domain: old session blobs are not portable between apps.
+  static constexpr char kForkKeyDomain[] = "YouTubeVita-NoAds/storage/v1";
+  unsigned char msg[sizeof(kForkKeyDomain) - 1 + 16];
+  memcpy(msg,kForkKeyDomain,sizeof(kForkKeyDomain) - 1);
+  memcpy(msg + sizeof(kForkKeyDomain) - 1,id.id,16);
   g_key_ok=crypto_generichash(g_key,sizeof(g_key),msg,sizeof(msg),kPepper,sizeof(kPepper))==0;
   sodium_memzero(&id,sizeof(id));
   sodium_memzero(msg,sizeof(msg));
@@ -240,7 +242,7 @@ SbStorageRecord SbStorageOpenRecord(SbUser user,const char* name){
     SbLogRaw(line);
   }
   if(!named)return nullptr;
-  sceIoMkdir("ux0:data/youtubevita",0777);
+  sceIoMkdir("ux0:data/youtubevita-noads",0777);
   sceIoMkdir(dir,0777);
   {
     // Once per run: encrypt every record still in plaintext (records Cobalt

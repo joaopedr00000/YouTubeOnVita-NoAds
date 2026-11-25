@@ -1,6 +1,6 @@
 /*
  * Starboard 15 file system backed by actual PS Vita sceIo APIs.
- * Only app0: (read-only) and ux0:data/youtubevita (read-write) are allowed.
+ * Only app0: (read-only) and ux0:data/youtubevita-noads (read-write) are allowed.
  * No virtual mock files; all file operations hit the Vita filesystem.
  */
 #include "starboard/file.h"
@@ -20,7 +20,7 @@ struct SbFilePrivate { SceUID descriptor; bool can_write; bool can_read; char pa
 struct SbDirectoryPrivate { SceUID descriptor; };
 
 namespace {
-constexpr const char* kHome="ux0:data/youtubevita";
+constexpr const char* kHome="ux0:data/youtubevita-noads";
 constexpr int64_t kWindowsEpochUs=11644473600000000LL;
 
 // Date/time is in UTC on the Vita filesystem. Convert the Gregorian date

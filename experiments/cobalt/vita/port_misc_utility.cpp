@@ -130,9 +130,9 @@ bool SbSystemNetworkIsDisconnected(){
   // Diagnostic only. Test harness drives explicit disconnected and connected
   // states independent of the emulator's usually-incomplete SceNetCtl state.
   SceIoStat forced={};
-  if(sceIoGetstat("ux0:data/youtubevita/test_force_offline.txt",&forced)>=0)
+  if(sceIoGetstat("ux0:data/youtubevita-noads/test_force_offline.txt",&forced)>=0)
     return true;
-  if(sceIoGetstat("ux0:data/youtubevita/test_force_online.txt",&forced)>=0)
+  if(sceIoGetstat("ux0:data/youtubevita-noads/test_force_online.txt",&forced)>=0)
     return false;
 #endif
   if(!ensure_netctl())return true;
