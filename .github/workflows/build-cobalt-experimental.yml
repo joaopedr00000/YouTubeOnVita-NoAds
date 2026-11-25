@@ -18,7 +18,7 @@ jobs:
       - name: Validate preload fixtures
         run: |
           node tools/test_cobalt_adblock.cjs
-          python3 -m py_compile tools/prepare_cobalt_adblock.py
+          python3 -m py_compile tools/prepare_cobalt_adblock.py tools/prepare_vita_cobalt_profile.py
       - name: Free runner disk for Cobalt toolchains
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
@@ -57,8 +57,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p cobalt-artifacts
-          runtime=$(find cobalt-src/out/evergreen-arm-hardfp_noads -type f -name libcobalt.so -print -quit)
-          test -n "$runtime"
+          runtime=cobalt-src/out/evergreen-arm-hardfp_noads/install/lib/libcobalt.so
+          test -s "$runtime"
           readelf -h "$runtime" | tee cobalt-artifacts/elf-header.txt
           grep -q 'ELF32' cobalt-artifacts/elf-header.txt
           grep -q 'ARM' cobalt-artifacts/elf-header.txt
@@ -70,9 +70,8 @@ jobs:
           cp "$runtime" cobalt-artifacts/libcobalt.so
           # Match the source-built content with the source-built runtime.
           install_root=$(dirname "$(dirname "$runtime")")
-          if [ -d "$install_root/content" ]; then
-            cp -a "$install_root/content" cobalt-artifacts/content
-          fi
+          test -d "$install_root/usr/share/cobalt"
+          cp -a "$install_root/usr/share/cobalt" cobalt-artifacts/content
           cp "$RUNNER_TEMP/preload.patch" cobalt-artifacts/
           (cd cobalt-artifacts && sha256sum libcobalt.so > SHA256SUMS)
           printf '%s\n' 'EXPERIMENTAL: not Vita-loader compatible until fixed offsets, imports, cacheflush and boot path are ported and tested. Not a VPK.' > cobalt-artifacts/README.txt
