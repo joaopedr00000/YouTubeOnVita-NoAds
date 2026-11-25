@@ -120,21 +120,22 @@ void* SbMemoryMap(int64_t size_bytes,int flags,const char *name) {
     sceKernelFreeMemBlock(uid);
     return SB_MEMORY_MAP_FAILED;
   }
-  // Read-only mappings are protected; "reserved" (flags == 0) mappings are
-  // NOT: they stay RW. A Vita memblock is committed anyway, so PROT_NONE
-  // saved nothing, and it was the cause of the recurring V8 data aborts
-  // (v0.25, v0.29, first-login crash, Lite v0.45, v0.47 at video start: a
-  // translation fault, DFSR=7, on a page of such a block that V8 had already
-  // committed and put objects on). Sub-range permission changes on a live
-  // memblock are not reliable through kuKernelMemProtect.
-  if(flags==kSbMemoryMapProtectRead) {
-    int pr=kuKernelMemProtect(base,(SceSize)size,prot(flags));
-    if(pr<0) {
-      vm_log("YTV_LIFECYCLE_VM_MAP_FAIL n=%d reason=protect err=0x%x flags=%d\n",num,(unsigned)pr,flags);
-      sceKernelFreeMemBlock(uid);
-      return SB_MEMORY_MAP_FAILED;
-    }
-  }
+  // All non-executable allocations must start RW, INCLUDING read-only
+  // requests. The data-mapping branch of SbMemoryProtect() deliberately
+  // acknowledges subsequent Read/ReadWrite/Reserved transitions without
+  // performing kuKernelMemProtect(): the Vita kernel may invalidate adjacent
+  // V8 heap pages during partial protection changes. Mapping initial Read
+  // requests as truly RO was therefore inconsistent: a later ReadWrite
+  // commit would report success while leaving the page RO in the kernel.
+  //
+  // Two hardware coredump fragments (November 2026) both show a Cobalt V8
+  // Data Abort (stop 0x30004, DFSR=7) on the same object word 0x8c644600,
+  // with r0=0x8c644601. This is not proof that initial RO caused the fault,
+  // but avoiding ALL initial data-page protection changes eliminates one
+  // plausible source of stale/inconsistent page-table state. Only mappings
+  // that become JIT EXEC are ever changed via kuKernelMemProtect (below).
+  // Nothing in SbMemoryMap can request executable permission.
+
   pthread_mutex_lock(&lock);
   int index=-1;
   for(int i=0;i<kMaxMaps;i++)if(!maps[i].base){index=i;break;}

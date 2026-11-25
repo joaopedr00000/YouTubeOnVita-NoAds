@@ -9,6 +9,9 @@ on:
   push:
     branches: [main]
     paths: ['CMakeLists.txt', 'experiments/**', 'tools/**', '.github/workflows/build-vita.yml']
+  pull_request:
+    branches: [main]
+    paths: ['CMakeLists.txt', 'experiments/**', 'tools/**', '.github/workflows/build-vita.yml']
 concurrency:
   group: vita-build-${{ github.ref }}-${{ inputs.custom_cobalt == true && 'candidate' || 'baseline' }}
   cancel-in-progress: true
@@ -25,6 +28,8 @@ jobs:
       - name: Test experimental source-only JSON filter
         run: |
           node tools/test_cobalt_adblock.cjs
+          node tools/test_vm_data_mappings.cjs
+          node tools/test_sponsorblock_threading.cjs
           python3 -m py_compile tools/prepare_cobalt_adblock.py
       - name: Fetch verified upstream Cobalt runtime and headers (partial filtering only)
         shell: bash
@@ -121,9 +126,18 @@ jobs:
         if: ${{ inputs.custom_cobalt != true }}
         run: |
           echo '## Full/Lite baseline — partial ad filtering only' >> "$GITHUB_STEP_SUMMARY"
-          echo 'These VPKs use the official unmodified Cobalt runtime. The JS preload is tested but NOT packaged or active. Native DNS and MediaSession features only; no guarantee of ad-free playback.' >> "$GITHUB_STEP_SUMMARY"
+          echo '⚠️ These VPKs use the official UNMODIFIED Cobalt runtime. The JS preload is NOT PACKAGED or active. Ads may appear; do not use this build to replace a working experimental no-ads VPK.' >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo 'No baseline VPK uploaded from this PR. The experimental pipeline will generate a separate verified candidate with the native crash fix and actual adblock preload.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # Baseline VPKs lack the Cobalt preload even when native AdBlock is on.
+      # Do not offer them as installable artifacts on bug-fix PRs: a tester
+      # could otherwise replace a working experimental NoAds installation.
+      # Only candidate builds with hash-verified modified libcobalt.so may
+      # produce VPK artifacts from pull requests.
       - uses: actions/upload-artifact@v4
+        if: ${{ inputs.custom_cobalt == true || github.event_name != 'pull_request' }}
         with:
-          name: ${{ inputs.custom_cobalt == true && 'YouTubeOnVita-experimental-cobalt-VPKs' || 'YouTubeOnVita-NoAds-partial-filter-VPKs' }}
+          name: ${{ inputs.custom_cobalt == true && 'YouTubeOnVita-experimental-cobalt-VPKs' || 'YouTubeOnVita-PARTIAL-FILTER-upstream-Cobalt-NOT-NoAds' }}
           path: dist/*.vpk
           if-no-files-found: error
