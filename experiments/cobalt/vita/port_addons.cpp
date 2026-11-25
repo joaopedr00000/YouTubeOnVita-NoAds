@@ -69,7 +69,7 @@ extern volatile int g_ytv_hud_video_h;             // port_player.cpp
 extern "C" volatile size_t g_vgl_free_vram, g_vgl_free_ram, g_vgl_free_phy;  // port_graphics.cpp
 extern volatile unsigned g_ytv_hud_dropped_total;  // port_player.cpp
 // Read atomically in the Starboard DNS worker threads.
-extern "C" { int g_ytv_adblock_enabled = 0; }
+extern "C" { int g_ytv_adblock_enabled = 1; }
 extern "C" int g_ytv_sponsorblock_mode;
 // Video decoder texture sampler only. 1=legacy bilinear, 0=nearest/clearer.
 extern "C" { volatile int g_ytv_video_bilinear_enabled = 1; }
@@ -1126,7 +1126,9 @@ void load_cfg() {
   if (const char* v=strstr(buf,"sponsorblock=")) {
     const int mode=atoi(v+13); if(mode>=0 && mode<=2)__atomic_store_n(&g_ytv_sponsorblock_mode,mode,__ATOMIC_RELAXED);
   }
-  if (strstr(buf,"adblock=1"))
+  if (strstr(buf,"adblock=0"))
+    __atomic_store_n(&g_ytv_adblock_enabled,0,__ATOMIC_RELAXED);
+  else if (strstr(buf,"adblock=1"))
     __atomic_store_n(&g_ytv_adblock_enabled,1,__ATOMIC_RELAXED);
   if (strstr(buf,"quality=360")) g_quality_idx=0;
   if (strstr(buf,"quality=480")) g_quality_idx=1;
