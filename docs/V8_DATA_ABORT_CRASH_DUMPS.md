@@ -72,3 +72,38 @@ possível saber qual função desreferenciou o objeto.
 
 Nota: os dumps podem conter material sensível de memória; nunca publicá-los
 automaticamente em issue ou comentário público.
+
+## Regressão observada: anúncios voltaram ao instalar VPK de testes
+
+A compilação da PR de memória `Build Vita Full and Lite` foi aprovada,
+**mas usava `custom_cobalt=false` por padrão e empacotava o Cobalt oficial
+inalterado**, sem o preload do bloqueador integrado. O artefato
+`YouTubeOnVita-NoAds-partial-filter-VPKs` não representa a versão com
+bloqueio de anúncios completo. Instalar o baseline no lugar do candidato
+experimental faz os anúncios reaparecerem e não comprova nenhuma regressão
+do código de filtragem.
+
+### Recuperar a versão sem anúncios já testada
+
+1. No GitHub Actions, abrir a execução **45571393792** do workflow
+   `Experimental Cobalt 25 source build`, concluída com sucesso.
+2. Em **Artifacts**, baixar **`YouTubeOnVita-experimental-cobalt-VPKs`**,
+   não `experimental-cobalt-arm-hardfp-sb15-NOT-VPK`.
+3. Instalar o VPK experimental Full ou Lite correspondente ao aplicativo
+   anterior e abrir a bolha experimental correta. Preservar todo o diretório
+   `ux0:data/youtubevita/` e guardar uma cópia local antes de testar.
+4. Esse VPK anterior recupera **o runtime experimental anterior**, mas não
+   inclui a alteração de memória da PR #3; o crash pode continuar.
+
+### Novo bloqueio de regressão nos builds
+
+- A workflow base agora **não publica VPKs baseline em pull requests**:
+  continua executando compilação e testes, mas não oferece artefatos que
+  pareçam equivalentes ao runtime experimental.
+- A workflow `Experimental Cobalt 25 source build` passa a executar
+  **também em PRs com alterações na camada de memória**. Ela recompila
+  o Cobalt com preload, gera o perfil do loader a partir desse binário
+  exato, verifica o SHA-256 do runtime dentro de ambos os VPKs e publica
+  o artefato `YouTubeOnVita-experimental-cobalt-VPKs`.
+- Não presumir estabilidade no Vita só porque o build passa. Testar
+  reprodução longa preservando o AdBlock antes de mesclar ou lançar release.
