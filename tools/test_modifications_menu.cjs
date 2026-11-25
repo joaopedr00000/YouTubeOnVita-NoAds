@@ -7,6 +7,10 @@ for (const str of ['kPageTweaks','T("Tweaks", "Modificações")',
  'else if (g_page == kPageTweaks) open_page(kPageSettings);',
  'if(g_sel==0) toggle_adblock();','g_ytv_sponsorblock_mode,on,__ATOMIC_RELAXED',
  'if (g_page == kPageTweaks) return 3;']) assert.ok(c.includes(str),str);
+assert.ok(!c.includes('kPageModifications'), 'old menu identifier must be gone');
+assert.ok(c.includes('T("AdBlock (partial)", "AdBlock (parcial)")'), 'AdBlock switch visible');
+assert.ok(c.includes('"SponsorBlock"'), 'SponsorBlock switch visible');
+assert.ok(c.includes('g_ytv_adblock_enabled = 1'), 'current fork default remains enabled');
 assert.ok(media.includes('g_ytv_sponsorblock_mode = 0'), 'SponsorBlock must default to off');
 assert.ok(c.includes('adblock=%d') && c.includes('sponsorblock=%d'), 'both preferences persisted');
 console.log('PASS: Tweaks menu, toggles, persistence, and opt-in defaults');

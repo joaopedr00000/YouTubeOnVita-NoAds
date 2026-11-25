@@ -401,8 +401,8 @@ if(YTV_BUILD_COBALT_BOOT_PROBE)
       set(YTV_DISTRIBUTION_VPK "YouTube-Full.vpk")
     endif()
   endif()
-  # PS Vita param.sfo APP_VER uses NN.NN: 00.02 corresponds to fork v0.0.2.
-  set(YTV_COBALT_APP_VERSION "00.02" CACHE STRING "YouTube on Vita fork version (v0.0.2)")
+  # PS Vita param.sfo APP_VER uses NN.NN: 00.03 corresponds to fork v0.0.3.
+  set(YTV_COBALT_APP_VERSION "00.03" CACHE STRING "YouTube on Vita fork version (v0.0.3)")
   set(VITA_VERSION "${YTV_COBALT_APP_VERSION}")
   add_executable(ytv_cobalt_boot experiments/cobalt/vita/relocate_elf.c
     experiments/cobalt/vita/port_startup_splash.c)

@@ -40,7 +40,7 @@ _Unofficial client for PS Vita_
 <p align="center">
   <a href="#overview"><img src="https://img.shields.io/badge/PLATFORM-PS%20VITA-006fcd?style=for-the-badge&logo=playstation&logoColor=white" alt="Platform"></a>&nbsp;&nbsp;
   <a href="#how-it-works"><img src="https://img.shields.io/badge/ENGINE-COBALT%20%2B%20STARBOARD-455a64?style=for-the-badge" alt="Engine"></a>&nbsp;&nbsp;
-  <a href="#download"><img src="https://img.shields.io/badge/RELEASE-v0.0.2%20FULL%20%2B%20LITE-2ea44f?style=for-the-badge" alt="Latest Release"></a>&nbsp;&nbsp;
+  <a href="#download"><img src="https://img.shields.io/badge/RELEASE-v0.0.3%20FULL%20%2B%20LITE-2ea44f?style=for-the-badge" alt="Latest Release"></a>&nbsp;&nbsp;
   <a href="https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases"><img src="https://img.shields.io/github/downloads/joaopedr00000/YouTubeOnVita-NoAds/total?style=for-the-badge&color=blue&logo=github" alt="Total Downloads"></a>
 </p>
 
@@ -90,8 +90,8 @@ _Unofficial client for PS Vita_
 
 | Version | Download | Memory | Recommended use |
 |:--|:--|:--|:--|
-| **YouTube Full** | **[YouTube-Full-v0.0.2.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.2/YouTube-Full-v0.0.2.vpk)** | Extended RAM | **Recommended:** more memory available to the player |
-| **YouTube Lite** | **[YouTube-Lite-v0.0.2.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.2/YouTube-Lite-v0.0.2.vpk)** | Normal RAM | Lower memory footprint, better coexistence with suspended applications |
+| **YouTube Full** | **[YouTube-Full-v0.0.3.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.3/YouTube-Full-v0.0.3.vpk)** | Extended RAM | **Recommended:** more memory available to the player |
+| **YouTube Lite** | **[YouTube-Lite-v0.0.3.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.3/YouTube-Lite-v0.0.3.vpk)** | Normal RAM | Lower memory footprint, better coexistence with suspended applications |
 
 ### Requirements
 
@@ -101,7 +101,7 @@ _Unofficial client for PS Vita_
 ### Install and update
 
 Install using **FMVita/VitaShell** or the [**Wolff's Store**](https://wolffsroom.github.io/WolffsRoomSite/).
-Both editions can be installed side by side, with separate LiveArea bubbles (**YTVNX0001** / **YTVNX0002**). To update, install the new VPK over the old one. **Fork v0.0.2** stores sessions, settings, downloads, cache and logs under `ux0:data/youtubevita-noads/`, separate from the original application's directory. v0.0.1 used `ux0:data/youtubevita/`; **v0.0.2 does not automatically migrate credentials or other files**. Sign in again after updating; do not delete the old data directory. See [fork data isolation notes](docs/FORK_DATA_ISOLATION_V0_0_2.md).
+Both editions can be installed side by side, with separate LiveArea bubbles (**YTVNX0001** / **YTVNX0002**). To update, install the new VPK over the old one. **Fork v0.0.3** stores sessions, settings, downloads, cache and logs under `ux0:data/youtubevita-noads/`, separate from the original application's directory. v0.0.1 used `ux0:data/youtubevita/`; **v0.0.2 does not automatically migrate credentials or other files**. Sign in again after updating; do not delete the old data directory. See [fork data isolation notes](docs/FORK_DATA_ISOLATION_V0_0_2.md).
 
 > [!TIP]
 > **Crash right after the startup animation?**
@@ -190,7 +190,7 @@ Open **Add-ons** with **SELECT** or a three-finger tap. These tools extend the o
 
 ### MP4 and MP3 downloads
 
-Save available videos as **MP4** or encode audio locally to **MP3 (160 kbps)**. New MP3s may include **1:1 square cover art**. With fork v0.0.2, files are saved to `ux0:data/youtubevita-noads/downloads/`.
+Save available videos as **MP4** or encode audio locally to **MP3 (160 kbps)**. New MP3s may include **1:1 square cover art**. With fork v0.0.3, files are saved to `ux0:data/youtubevita-noads/downloads/`.
 
 Available qualities depend on YouTube's provided streams. Only download content you have permission to save.
 
@@ -314,7 +314,7 @@ These measures help protect local data but do **not** make the client an officia
 - Certain video formats, DRM-protected content and Full HD streams may not work.
 - The YouTube service may change on uncertified devices.
 
-For crash reports, share reproduction steps and the applicable logs (`ux0:data/youtubevita/` for v0.0.1, or `ux0:data/youtubevita-noads/` for v0.0.2), **not stored account or session data**.
+For crash reports, share reproduction steps and the applicable logs (`ux0:data/youtubevita/` for v0.0.1, or `ux0:data/youtubevita-noads/` for v0.0.2 and later), **not stored account or session data**.
 
 ---
 
@@ -437,7 +437,7 @@ Use the software responsibly, in accordance with applicable service terms and la
 
 *Unofficial client for PS Vita*
 
-*Real TV frontend by Wolff's Room. Independent fork v0.0.2.*
+*Real TV frontend by Wolff's Room. Independent fork v0.0.3.*
 
 **Vita means life!**
 
