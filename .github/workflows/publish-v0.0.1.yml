@@ -1,0 +1,71 @@
+name: Publish v0.0.1 — verified Full and Lite
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-v0.0.1.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: release-v0.0.1
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'joaopedr00000/YouTubeOnVita-NoAds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified hardware-tested candidate VPKs
+        uses: actions/download-artifact@v4
+        with:
+          repository: ${{ github.repository }}
+          run-id: 45655074267
+          name: YouTubeOnVita-experimental-cobalt-VPKs
+          github-token: ${{ github.token }}
+          path: release-assets
+      - name: Verify both release packages before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release-assets/YouTube-Candidate-Full.vpk
+          test -s release-assets/YouTube-Candidate-Lite.vpk
+          printf '%s\n' '069d54447de6609fdd07e0c4a716566db0533259593d4668566f11132d732b9d  release-assets/YouTube-Candidate-Full.vpk' '8c2d88416e4b2372baad329034381c7c4a0d18755787461e1fea67f937ea89cf  release-assets/YouTube-Candidate-Lite.vpk' | sha256sum -c -
+          python3 - <<'PY'
+          import hashlib, zipfile
+          expected = '1aa4c117417f943e5f6595edcdf5ab462ab4f6e6f1074829bd3111538291a7c4'
+          for variant in ('Full','Lite'):
+              path = f'release-assets/YouTube-Candidate-{variant}.vpk'
+              with zipfile.ZipFile(path) as vpk:
+                  assert vpk.testzip() is None, f'ZIP integrity failure: {variant}'
+                  assert hashlib.sha256(vpk.read('libcobalt.so')).hexdigest() == expected, f'Unexpected Cobalt runtime: {variant}'
+                  assert len(vpk.read('eboot.bin')) > 100_000, f'Invalid executable: {variant}'
+              print(f'VERIFIED {variant}: exact tested Cobalt and valid VPK')
+          PY
+          mv release-assets/YouTube-Candidate-Full.vpk release-assets/YouTube-Full-v0.0.1.vpk
+          mv release-assets/YouTube-Candidate-Lite.vpk release-assets/YouTube-Lite-v0.0.1.vpk
+      - name: Publish GitHub release with both VPKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.0.1 >/dev/null 2>&1; then
+            echo "Release v0.0.1 already exists; refusing to overwrite automatically." >&2
+            exit 1
+          fi
+          gh release create v0.0.1 \
+            release-assets/YouTube-Full-v0.0.1.vpk \
+            release-assets/YouTube-Lite-v0.0.1.vpk \
+            --target "$GITHUB_SHA" \
+            --title 'YouTubeOnVita v0.0.1 — First Public Release' \
+            --notes-file RELEASE_NOTES_v0.0.1.md \
+            --latest
+      - name: Verify published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view v0.0.1 --json name,isDraft,isPrerelease,assets,url
