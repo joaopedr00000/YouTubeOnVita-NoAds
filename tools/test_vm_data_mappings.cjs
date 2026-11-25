@@ -14,7 +14,7 @@ function part(start,end){
 }
 const alloc=part('void* SbMemoryMap(', 'bool SbMemoryUnmap(');
 const unmap=part('bool SbMemoryUnmap(', 'bool SbMemoryProtect(');
-const protect=part('bool SbMemoryProtect(', '} // extern C');
+const protect=source.slice(source.indexOf('bool SbMemoryProtect('));
 assert.match(alloc,/sceKernelAllocMemBlock\(/);
 assert.match(alloc,/SCE_KERNEL_MEMBLOCK_TYPE_USER_RW/);
 assert.doesNotMatch(alloc,/kuKernelMemProtect\(/,
