@@ -44,6 +44,13 @@ compartilhadas com o heap V8 em versões anteriores.
   redirecionamento DNS, SponsorBlock, decodificador H.264, bitrate, FPS
   nem orçamentos de buffer.
 
+**Trade-off:** páginas de dados inicialmente solicitadas como somente
+leitura passam a ser graváveis durante toda a vida do memblock. Isso
+relaxa a proteção de integridade dessas páginas, ainda que não conceda
+permissão de execução e mantenha a proibição de W+X. É um workaround
+específico das limitações de proteção de páginas do Vita e precisa
+ser confirmado no hardware antes de entrar numa versão estável.
+
 É uma **correção preventiva e plausível**, não uma causa confirmada.
 Sem páginas de código/heap ou ELF exato do Cobalt experimental, não é
 possível saber qual função desreferenciou o objeto.
