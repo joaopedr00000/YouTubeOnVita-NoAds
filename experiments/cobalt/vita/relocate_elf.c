@@ -41,7 +41,27 @@ unsigned int _newlib_heap_size_user = 112 * 1024 * 1024;
 
 #define IMAGE_CAPACITY (34u*1024u*1024u)
 #define MAX_HEADERS 32u
+#if defined(YTV_CUSTOM_COBALT)
+#include "cobalt_candidate_profile.h"
+#include <sodium.h>
+#else
 #define EXPECT_BYTES 33491716LL
+#define EXPECT_SYMCOUNT 2434u
+#define EXPECT_LOADS 4u
+#define EXPECT_RELATIVE 61413u
+#define EXPECT_ABS32 2884u
+#define EXPECT_GLOB 157u
+#define EXPECT_JUMP 664u
+#define EXPECT_MISSING 211u
+#define EXPECT_EXT_GLOB 14u
+#define EXPECT_EXT_JUMP 197u
+#define EXPECT_RESOLVED 64907u
+#define EXPECT_XSTART 0x818000u
+#define EXPECT_XLEN (0x1fa0000u-0x818000u)
+#define EXPECT_CTORS 74u
+#define EXPECT_EVENT 0x00818f7cu
+#define EXPECT_FLUSH 0xd35198u
+#endif
 #define RELOC_R_ARM_RELATIVE 23u
 #define RELOC_R_ARM_ABS32 2u
 #define RELOC_R_ARM_GLOB_DAT 21u
@@ -105,6 +125,22 @@ static int read_full(int64_t off,void *target,size_t n) {
   }
   return 1;
 }
+#if defined(YTV_CUSTOM_COBALT)
+static int verify_candidate_sha(int64_t len) {
+  crypto_hash_sha256_state state;
+  unsigned char digest[crypto_hash_sha256_BYTES], buf[4096];
+  char hex[crypto_hash_sha256_BYTES*2+1];
+  if(crypto_hash_sha256_init(&state)!=0)return 0;
+  for(int64_t off=0;off<len;){
+    size_t n=(len-off>sizeof(buf))?sizeof(buf):(size_t)(len-off);
+    if(!read_full(off,buf,n) || crypto_hash_sha256_update(&state,buf,n)!=0)return 0;
+    off+=n;
+  }
+  if(crypto_hash_sha256_final(&state,digest)!=0)return 0;
+  sodium_bin2hex(hex,sizeof(hex),digest,sizeof(digest));
+  return strcmp(hex,CANDIDATE_SHA256)==0;
+}
+#endif
 static int in_load(uint32_t addr,uint32_t length) {
   if((uint64_t)addr+length>IMAGE_CAPACITY)return 0;
   for(unsigned i=0;i<nheaders;i++) {
@@ -328,7 +364,7 @@ static int heartbeat_thread(SceSize args,void* argp){
 static void ytv_flush_icache(void* start, unsigned size) {
   if (start && size) kuKernelFlushCaches(start, size);
 }
-#define V8_FLUSH_ICACHE_OFFSET 0xd35198u
+#define V8_FLUSH_ICACHE_OFFSET EXPECT_FLUSH
 // "beq" after "ldr r1,[r6,#20]; cmp r1,#0" in CspDelegateSecure::CanLoad.
 #define COBALT_CSP_REQUIRED_BRANCH 0x18239bcu
 // "beq ok" after "ldr r0,[r5,#12]; cmp r0,#1" in HTMLDecoder (CSP headers).
@@ -422,8 +458,13 @@ int main(void) {
   if(fd<0)goto done;
   {
     int64_t len=sceIoLseek(fd,0,SCE_SEEK_END);
-    check(len==EXPECT_BYTES,"official ELF byte length matches trusted asset");
+    check(len==EXPECT_BYTES,"ELF byte length matches selected profile");
     if(len!=EXPECT_BYTES)goto done;
+#if defined(YTV_CUSTOM_COBALT)
+    check(verify_candidate_sha(len),"candidate ELF matches generated SHA-256");
+    if(failures)goto done;
+    log_line("YTV_EXPERIMENTAL_COBALT_PROFILE " CANDIDATE_SHA256);
+#endif
     Elf32_Ehdr eh={0};
     check(read_full(0,&eh,sizeof(eh)) &&
           memcmp(eh.e_ident,ELFMAG,SELFMAG)==0 &&
@@ -436,7 +477,7 @@ int main(void) {
     if(failures)goto done;
     uint32_t symcount=read_symbol_count(&eh,len);
     note_u32("DYNSYM_COUNT",symcount,0);
-    check(symcount==2434,"symbol bounds from official SHT_DYNSYM");
+    check(symcount==EXPECT_SYMCOUNT,"symbol bounds from official SHT_DYNSYM");
     if(failures)goto done;
     SceUID uid=sceKernelAllocMemBlock("CobaltRelocRW",
                                       SCE_KERNEL_MEMBLOCK_TYPE_USER_RW,
@@ -453,8 +494,8 @@ int main(void) {
       note_u32("COBALT_IMAGE_BASE",base32,IMAGE_CAPACITY);
       { extern uintptr_t ytv_cobalt_image_base; ytv_cobalt_image_base=base32; }
       unsigned count=0;
-      check(load_segments(len,&count) && count==4,
-            "loaded all four official PT_LOAD segments into virtual layout");
+      check(load_segments(len,&count) && count==EXPECT_LOADS,
+            "loaded all profiled PT_LOAD segments into virtual layout");
       if(failures)goto release;
       uint32_t ra=0,rl=0,ja=0,jl=0,sa=0,ss=0;
       check(find_dynamic(&ra,&rl,&ja,&jl,&sa,&ss) &&
@@ -468,14 +509,14 @@ int main(void) {
       int verified=process_table(ra,rl,sa,symcount,0,&before) &&
                    process_table(ja,jl,sa,symcount,0,&before);
       check(verified &&
-            before.relative==61413 &&
-            before.abs32==2884 &&
-            before.glob==157 &&
-            before.jump==664 &&
-            before.missing==211 &&
+            before.relative==EXPECT_RELATIVE &&
+            before.abs32==EXPECT_ABS32 &&
+            before.glob==EXPECT_GLOB &&
+            before.jump==EXPECT_JUMP &&
+            before.missing==EXPECT_MISSING &&
             before.bad==0 &&
-            before.resolved==64907,
-            "all 65,118 official ARM REL entries validated without writing");
+            before.resolved==EXPECT_RESOLVED,
+            "all profiled ARM REL entries validated without writing");
       if(failures)goto release;
       struct RelocStats after={0};
       // This phase only patches ordinary, non-executable Vita data RAM.
@@ -483,22 +524,22 @@ int main(void) {
                     process_table(ja,jl,sa,symcount,1,&after);
       note_u32("RELOCATED_AND_DEFERRED",after.resolved,after.missing);
       note_u32("UNRESOLVED_GLOB_JUMP",after.external_glob,after.external_jump);
-      check(relocated && after.bad==0 && after.resolved==64907 &&
-            after.missing==211,
-            "64,907 internally resolved relocations applied in RW RAM");
+      check(relocated && after.bad==0 && after.resolved==EXPECT_RESOLVED &&
+            after.missing==EXPECT_MISSING,
+            "profiled internally resolved relocations applied in RW RAM");
       check(after.normalized_hash==before.normalized_hash,
             "relocation values match pre-write computed hash");
-      check(after.external_glob==14 && after.external_jump==197,
-            "211 dynamic external relocation slots remain explicitly unresolved");
+      check(after.external_glob==EXPECT_EXT_GLOB && after.external_jump==EXPECT_EXT_JUMP,
+            "profiled external relocation slots remain explicitly unresolved");
       check(image[0]==0x7f && image[1]=='E' && image[2]=='L' && image[3]=='F',
             "in-memory ELF header intact after relocations");
       unsigned imported=0,still_missing=0;
       int imports_valid=apply_real_imports(sa,symcount,ra,rl,ja,jl,
                                            &imported,&still_missing);
       note_u32("REAL_STARBOARD_EXPORTS_LINKED",imported,still_missing);
-      check(imports_valid && imported==211 && still_missing==0 &&
+      check(imports_valid && imported==EXPECT_MISSING && still_missing==0 &&
             ytv_real_starboard_export_count()==212 &&
-            imported+still_missing==211,
+            imported+still_missing==EXPECT_MISSING,
             "all implemented Vita Starboard exports linked; remaining imports fail closed");
       if(failures)goto release;
       // Read-only-executable protection gate: we never invoke the Cobalt code.
@@ -514,8 +555,8 @@ int main(void) {
           xstart=lo;xlen=hi-lo;
         }
       }
-      check(execs==1 && xstart==0x818000u &&
-            xlen==(0x1fa0000u-0x818000u) &&
+      check(execs==1 && xstart==EXPECT_XSTART &&
+            xlen==EXPECT_XLEN &&
             (uint64_t)xstart+xlen<=IMAGE_CAPACITY,
             "precise alignment and size of official Cobalt ARM executable segment");
       if(failures)goto release;
@@ -649,6 +690,8 @@ int main(void) {
       }
 #endif
       {
+        check(in_load(V8_FLUSH_ICACHE_OFFSET,20) && V8_FLUSH_ICACHE_OFFSET>=xstart && V8_FLUSH_ICACHE_OFFSET+20<=xstart+xlen,"cacheflush patch lies in executable segment");
+        if(failures)goto release;
         uint32_t* f=(uint32_t*)(image+V8_FLUSH_ICACHE_OFFSET);
         int matches=f[0]==0xe0801001u && f[1]==0xe3a02000u &&
                     f[2]==0xe52d7004u && f[4]==0xef000000u;
@@ -658,6 +701,7 @@ int main(void) {
         f[1]=(uint32_t)(uintptr_t)&ytv_flush_icache;
         note_u32("V8_FLUSH_ICACHE_SHIM",V8_FLUSH_ICACHE_OFFSET,f[1]);
       }
+#if !defined(YTV_CUSTOM_COBALT)
       {
         // Browser builds: production Cobalt forces csp::kCSPRequired, so on a
         // page served without a Content-Security-Policy header
@@ -714,6 +758,7 @@ int main(void) {
           sceIoClose(ua_fd);
         }
       }
+#endif
       uint8_t first_text_bytes[16];
       memcpy(first_text_bytes,image+xstart,16);
       // v0.61 diagnostic: the issue #2 logs consistently terminate before
@@ -761,6 +806,7 @@ int main(void) {
       check(memcmp(first_text_bytes,image+xstart,16)==0,
             "Cobalt original text remains intact after RX permissions");
 
+#if !defined(YTV_CUSTOM_COBALT)
       // A trusted, 2-instruction test function goes in the unused gap before
       // the official text PT_LOAD. It is not part of any Cobalt segment.
       const uint32_t stub_offset=xstart-0x1000u;
@@ -788,9 +834,10 @@ int main(void) {
       *bss=0x53425654u;
       check(*bss==0x53425654u,"writable Cobalt BSS survives separate RX mapping");
       *bss=saved;
+#endif
       uint32_t ctor_addr=0,ctor_bytes=0;
       int ctor_valid=get_init_array(&ctor_addr,&ctor_bytes) &&
-                     ctor_bytes==74u*sizeof(uint32_t);
+                     ctor_bytes==EXPECT_CTORS*sizeof(uint32_t);
       if(ctor_valid){
         uint32_t* ctors=(uint32_t*)(image+ctor_addr);
         for(unsigned j=0;j<ctor_bytes/4;j++){
@@ -801,13 +848,14 @@ int main(void) {
         }
       }
       note_u32("ELF_INIT_ARRAY",ctor_bytes/4,ctor_valid?1u:0u);
-      check(ctor_valid,"all 74 Cobalt C++ initializers belong to RX text");
+      check(ctor_valid,"all profiled Cobalt C++ initializers belong to RX text");
       if(failures)goto release;
 #if defined(YTV_COBALT_BOOT_STAGE) && (YTV_COBALT_BOOT_STAGE>=1)
       if(still_missing!=0)goto release;
       typedef void (*Ctor)(void);
       uint32_t *initializer=(uint32_t*)(image+ctor_addr);
       log_line("COBALT_CONSTRUCTOR_PROBE_BEGIN");
+#if !defined(YTV_CUSTOM_COBALT)
       // Probe an official Cobalt internal ARM memcpy function which ctor #0
       // calls through PLT. This checks actual cross-page execution and return.
       {
@@ -823,6 +871,7 @@ int main(void) {
         if(failures)goto release;
       }
 
+#endif
       for(unsigned j=0;j<ctor_bytes/4;j++){
         // One log line per constructor cost ~150 memory-card writes at
         // boot; only the summary below is logged.
@@ -841,9 +890,9 @@ int main(void) {
       extern _Bool ytv_vita_lifecycle_begin(void(*)(const void*));
       extern int ytv_starboard_pump_scheduled(int);
       typedef void (*CobaltEventHandler)(const void*);
-      const uint32_t cobalt_event_offset=0x00818f7cu;
-      check(cobalt_event_offset>=xstart &&
-            cobalt_event_offset<xstart+xlen,
+      const uint32_t cobalt_event_offset=EXPECT_EVENT;
+      check((cobalt_event_offset&~1u)>=xstart &&
+            (cobalt_event_offset&~1u)<xstart+xlen,
             "verified official Cobalt SbEventHandle inside executable segment");
       if(failures)goto release;
       CobaltEventHandler cobalt_event=(CobaltEventHandler)(

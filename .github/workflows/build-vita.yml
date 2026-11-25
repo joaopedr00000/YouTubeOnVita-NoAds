@@ -1,11 +1,16 @@
 name: Build Vita Full and Lite
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      custom_cobalt:
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths: ['CMakeLists.txt', 'experiments/**', 'tools/**', '.github/workflows/build-vita.yml']
 concurrency:
-  group: vita-build-${{ github.ref }}
+  group: vita-build-${{ github.ref }}-${{ inputs.custom_cobalt == true && 'candidate' || 'baseline' }}
   cancel-in-progress: true
 permissions:
   contents: read
@@ -48,6 +53,19 @@ jobs:
           git -C experiments/cobalt/upstream-25 sparse-checkout init --cone
           git -C experiments/cobalt/upstream-25 sparse-checkout set starboard
           git -C experiments/cobalt/upstream-25 checkout --detach 762d9bfda894dd22cc5d47200f9994c3027514eb
+      - name: Download exact source-built Cobalt candidate
+        if: ${{ inputs.custom_cobalt == true }}
+        uses: actions/download-artifact@v4
+        with:
+          name: cobalt-vita-candidate-input
+          path: candidate
+      - name: Verify candidate
+        if: ${{ inputs.custom_cobalt == true }}
+        run: |
+          set -euo pipefail
+          (cd candidate && sha256sum -c SHA256SUMS)
+          test -s candidate/cobalt_candidate_profile.h
+          test -d candidate/content
       - name: Fetch pinned HTTPS source
         run: |
           git clone --filter=blob:none --no-checkout https://github.com/shorelight82/vitube-vpk.git third_party/vitube
@@ -56,8 +74,10 @@ jobs:
           git -C third_party/vitube checkout --detach a8c4ac8405e13ca1ec6e7c64ae6d888649c9de9f
       - name: Build both VPKs in VitaSDK
         shell: bash
+        env:
+          CUSTOM_COBALT: ${{ inputs.custom_cobalt == true && '1' || '0' }}
         run: |
-          docker run --rm -v "$PWD:/src" -w /src -e VITASDK=/usr/local/vitasdk vitasdk/vitasdk:latest bash -lc '
+          docker run --rm -e CUSTOM_COBALT -v "$PWD:/src" -w /src -e VITASDK=/usr/local/vitasdk vitasdk/vitasdk:latest bash -lc '
             set -euo pipefail
             export PATH="$VITASDK/bin:$PATH"
             # Match the header to the vendored no-splash VitaGL static library.
@@ -68,17 +88,42 @@ jobs:
             for variant in Full Lite; do
               lite=OFF; filename=YouTube.vpk
               if [ "$variant" = Lite ]; then lite=ON; filename=YouTube-Lite.vpk; fi
-              cmake -S . -B "build-$variant" -DCMAKE_BUILD_TYPE=Release -DYTV_NATIVE_HARDENED_CURL=ON -DYTV_PACKAGE_LITE="$lite" -DYTV_COBALT_APP_VERSION=00.65 -DYTV_NATIVE_DOWNLOAD_TEST=OFF -DYTV_V061_RX_CHUNKS=ON -DYTV_V061_THREE_CORES=OFF
+              extra=()
+              if [ "$CUSTOM_COBALT" = 1 ]; then
+                extra+=(-DYTV_CUSTOM_COBALT_DIR=/src/candidate)
+                filename=YouTube-Candidate.vpk
+                if [ "$variant" = Lite ]; then filename=YouTube-Candidate-Lite.vpk; fi
+              fi
+              cmake -S . -B "build-$variant" "${extra[@]}" -DCMAKE_BUILD_TYPE=Release -DYTV_NATIVE_HARDENED_CURL=ON -DYTV_PACKAGE_LITE="$lite" -DYTV_COBALT_APP_VERSION=00.65 -DYTV_NATIVE_DOWNLOAD_TEST=OFF -DYTV_V061_RX_CHUNKS=ON -DYTV_V061_THREE_CORES=OFF
               cmake --build "build-$variant" --target "$filename-vpk" -j4
-              cp "build-$variant/$filename" "dist/YouTube-NoAds-$variant.vpk"
+              if [ "$CUSTOM_COBALT" = 1 ]; then
+                cp "build-$variant/$filename" "dist/YouTube-Candidate-$variant.vpk"
+              else
+                cp "build-$variant/$filename" "dist/YouTube-NoAds-$variant.vpk"
+              fi
             done
           '
+      - name: Verify candidate VPK embeds exact modified runtime
+        if: ${{ inputs.custom_cobalt == true }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, pathlib, zipfile
+          expected = hashlib.sha256(pathlib.Path('candidate/libcobalt.so').read_bytes()).hexdigest()
+          packages = list(pathlib.Path('dist').glob('YouTube-Candidate-*.vpk'))
+          assert len(packages) == 2
+          for package in packages:
+              with zipfile.ZipFile(package) as z:
+                  assert hashlib.sha256(z.read('libcobalt.so')).hexdigest() == expected
+          print('Both candidate VPKs contain exact modified Cobalt:', expected)
+          PY
+          echo 'Experimental candidate, not validated on Vita hardware.' >> "$GITHUB_STEP_SUMMARY"
       - name: Report packaged runtime provenance
+        if: ${{ inputs.custom_cobalt != true }}
         run: |
           echo '## Full/Lite baseline — partial ad filtering only' >> "$GITHUB_STEP_SUMMARY"
           echo 'These VPKs use the official unmodified Cobalt runtime. The JS preload is tested but NOT packaged or active. Native DNS and MediaSession features only; no guarantee of ad-free playback.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: YouTubeOnVita-NoAds-partial-filter-VPKs
+          name: ${{ inputs.custom_cobalt == true && 'YouTubeOnVita-experimental-cobalt-VPKs' || 'YouTubeOnVita-NoAds-partial-filter-VPKs' }}
           path: dist/*.vpk
           if-no-files-found: error

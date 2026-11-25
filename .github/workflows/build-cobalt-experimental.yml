@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['.github/workflows/build-cobalt-experimental.yml', 'tools/cobalt_adblock_preload.js', 'tools/test_cobalt_adblock.cjs', 'tools/prepare_cobalt_adblock.py']
+    paths: ['.github/workflows/build-cobalt-experimental.yml', 'tools/cobalt_adblock_preload.js', 'tools/test_cobalt_adblock.cjs', 'tools/prepare_cobalt_adblock.py', 'tools/prepare_vita_cobalt_profile.py', 'experiments/cobalt/vita/relocate_elf.c', 'CMakeLists.txt', '.github/workflows/build-vita.yml']
 permissions:
   contents: read
 concurrency:
@@ -68,6 +68,11 @@ jobs:
           grep -q 'SbEventHandle' cobalt-artifacts/elf-symbols.txt
           readelf -rW "$runtime" > cobalt-artifacts/elf-relocations.txt
           cp "$runtime" cobalt-artifacts/libcobalt.so
+          # Match the source-built content with the source-built runtime.
+          install_root=$(dirname "$(dirname "$runtime")")
+          if [ -d "$install_root/content" ]; then
+            cp -a "$install_root/content" cobalt-artifacts/content
+          fi
           cp "$RUNNER_TEMP/preload.patch" cobalt-artifacts/
           (cd cobalt-artifacts && sha256sum libcobalt.so > SHA256SUMS)
           printf '%s\n' 'EXPERIMENTAL: not Vita-loader compatible until fixed offsets, imports, cacheflush and boot path are ported and tested. Not a VPK.' > cobalt-artifacts/README.txt
@@ -76,3 +81,24 @@ jobs:
           name: experimental-cobalt-arm-hardfp-sb15-NOT-VPK
           path: cobalt-artifacts/
           if-no-files-found: error
+      - name: Generate Vita candidate loader profile
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/elf-venv"
+          "$RUNNER_TEMP/elf-venv/bin/pip" install pyelftools==0.32
+          mkdir -p candidate
+          "$RUNNER_TEMP/elf-venv/bin/python" tools/prepare_vita_cobalt_profile.py cobalt-artifacts/libcobalt.so candidate/cobalt_candidate_profile.h
+          test -d cobalt-artifacts/content
+          cp cobalt-artifacts/libcobalt.so candidate/
+          cp -a cobalt-artifacts/content candidate/
+          (cd candidate && sha256sum libcobalt.so > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cobalt-vita-candidate-input
+          path: candidate/
+          if-no-files-found: error
+  package-candidate:
+    needs: cobalt
+    uses: ./.github/workflows/build-vita.yml
+    with:
+      custom_cobalt: true
