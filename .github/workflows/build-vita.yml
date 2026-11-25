@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     paths: ['CMakeLists.txt', 'experiments/**', 'tools/**', '.github/workflows/build-vita.yml']
+concurrency:
+  group: vita-build-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -53,6 +56,8 @@ jobs:
           docker run --rm -v "$PWD:/src" -w /src -e VITASDK=/usr/local/vitasdk vitasdk/vitasdk:latest bash -lc '
             set -euo pipefail
             export PATH="$VITASDK/bin:$PATH"
+            # Match the header to the vendored no-splash VitaGL static library.
+            install -m 0644 third_party/vitagl-nosplash-build/source/vitaGL.h "$VITASDK/arm-vita-eabi/include/vitaGL.h"
             vdpm mbedtls
             bash third_party/vitube/external/vita-https/tools/build-curl-mbedtls.sh
             mkdir -p dist
