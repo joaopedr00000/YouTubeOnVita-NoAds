@@ -1,0 +1,153 @@
+name: Publish v0.0.2 — verified Full and Lite VPKs
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-v0.0.2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: release-v0.0.2-with-attribution-correction
+  cancel-in-progress: false
+
+jobs:
+  correct-existing-release:
+    if: github.repository == 'joaopedr00000/YouTubeOnVita-NoAds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Correct v0.0.1 release attribution in place
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -f RELEASE_NOTES_v0.0.1.md
+          gh release edit v0.0.1 --notes-file RELEASE_NOTES_v0.0.1.md
+          gh release view v0.0.1 --json name,isDraft,assets,url
+          echo 'Corrected v0.0.1 notes: the original project supplies almost all media and PS Vita features.' >> "$GITHUB_STEP_SUMMARY"
+
+  stage-tested-cobalt:
+    if: github.repository == 'joaopedr00000/YouTubeOnVita-NoAds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run source-only regression checks
+        run: |
+          set -euo pipefail
+          node tools/test_fork_data_isolation.cjs
+          node tools/test_modifications_menu.cjs
+          node tools/test_vm_data_mappings.cjs
+          node tools/test_sponsorblock_threading.cjs
+          node tools/test_cobalt_adblock.cjs
+          test -f RELEASE_NOTES_v0.0.2.md
+          grep -Fq 'YTV_COBALT_APP_VERSION=00.02' .github/workflows/build-vita.yml
+          grep -Fq 'set(VITA_TITLEID "YTVNX0001")' CMakeLists.txt
+          grep -Fq 'set(VITA_TITLEID "YTVNX0002")' CMakeLists.txt
+      - name: Download preserved source-built Cobalt (same runtime as v0.0.1)
+        uses: actions/download-artifact@v4
+        with:
+          name: cobalt-vita-candidate-input
+          run-id: 45571393792
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+          path: candidate
+      - name: Verify exact Cobalt runtime and loader profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s candidate/libcobalt.so
+          test -s candidate/cobalt_candidate_profile.h
+          test -d candidate/content
+          (cd candidate && sha256sum -c SHA256SUMS)
+          printf '%s\n' '1aa4c117417f943e5f6595edcdf5ab462ab4f6e6f1074829bd3111538291a7c4  candidate/libcobalt.so' | sha256sum -c -
+          grep -Fq 'CANDIDATE_SHA256 "1aa4c117417f943e5f6595edcdf5ab462ab4f6e6f1074829bd3111538291a7c4"' candidate/cobalt_candidate_profile.h
+          echo 'Exact preserved custom Cobalt runtime verified by SHA-256.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Stage verified Cobalt for the reusable VitaSDK workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobalt-vita-candidate-input
+          path: candidate/
+          if-no-files-found: error
+
+  build-vpks:
+    needs: stage-tested-cobalt
+    uses: ./.github/workflows/build-vita.yml
+    with:
+      custom_cobalt: true
+
+  publish:
+    needs: [correct-existing-release, build-vpks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the newly compiled Full and Lite VPKs
+        uses: actions/download-artifact@v4
+        with:
+          name: YouTubeOnVita-experimental-cobalt-VPKs
+          path: release-assets
+      - name: Validate package integrity, IDs, titles, version and Cobalt runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib, zipfile, hashlib, struct
+          expected_cobalt='1aa4c117417f943e5f6595edcdf5ab462ab4f6e6f1074829bd3111538291a7c4'
+          def sfo_info(data):
+              magic,version,key_table,value_table,count=struct.unpack_from('<4sIIII',data)
+              assert magic==b'\x00PSF', magic
+              result={}
+              for i in range(count):
+                  key_off,align,kind,size,maxsize,data_off=struct.unpack_from('<HBBIII',data,20+16*i)
+                  key=data[key_table+key_off:].split(b'\x00',1)[0].decode('ascii')
+                  raw=data[value_table+data_off:value_table+data_off+size]
+                  result[key]=raw.rstrip(b'\x00').decode('utf-8','replace')
+              return result
+          for variant,title,app_id in [('Full','YouTube','YTVNX0001'),('Lite','YouTube Lite','YTVNX0002')]:
+              source=pathlib.Path('release-assets')/f'YouTube-{variant}.vpk'
+              assert source.is_file() and source.stat().st_size>1_000_000, source
+              with zipfile.ZipFile(source) as z:
+                  assert z.testzip() is None, f'Corrupt archive: {variant}'
+                  assert len(z.read('eboot.bin'))>100_000
+                  assert hashlib.sha256(z.read('libcobalt.so')).hexdigest()==expected_cobalt
+                  info=sfo_info(z.read('sce_sys/param.sfo'))
+                  assert info.get('APP_VER')=='00.02', info
+                  assert info.get('TITLE_ID')==app_id, info
+                  assert info.get('TITLE')==title, info
+                  assert 'Candidate' not in str(info), info
+                  print(f'{variant}: valid eboot, original fork IDs, title, APP_VER 00.02 and preserved custom Cobalt')
+              dest=pathlib.Path('release-assets')/f'YouTube-{variant}-v0.0.2.vpk'
+              source.rename(dest)
+          PY
+          (cd release-assets && sha256sum YouTube-*-v0.0.2.vpk > SHA256SUMS.txt)
+      - name: Publish v0.0.2 as prerelease pending Vita hardware validation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v0.0.2 >/dev/null 2>&1; then
+            echo 'Release v0.0.2 already exists: refusing to overwrite or duplicate it.' >&2
+            exit 1
+          fi
+          gh release create v0.0.2 \
+            release-assets/YouTube-Full-v0.0.2.vpk \
+            release-assets/YouTube-Lite-v0.0.2.vpk \
+            release-assets/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title 'YouTubeOnVita-NoAds v0.0.2 — Fork Update' \
+            --notes-file RELEASE_NOTES_v0.0.2.md \
+            --prerelease
+      - name: Verify the public release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view v0.0.2 --json name,isDraft,isPrerelease,url,assets
+          test "$(gh release view v0.0.2 --json assets --jq '.assets | length')" -eq 3
