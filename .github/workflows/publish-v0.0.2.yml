@@ -26,8 +26,12 @@ jobs:
         run: |
           set -euo pipefail
           test -f RELEASE_NOTES_v0.0.1.md
-          gh release edit v0.0.1 --notes-file RELEASE_NOTES_v0.0.1.md
-          gh release view v0.0.1 --json name,isDraft,assets,url
+          echo "Correcting release 458433260 in repo $GITHUB_REPOSITORY"
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/458433260" \
+            -f "body=$(cat RELEASE_NOTES_v0.0.1.md)" \
+            --jq '{id,tag_name,name,draft,prerelease}'
+          gh api "repos/$GITHUB_REPOSITORY/releases/458433260" --jq '.body' \
+            | grep -Fq 'SponsorBlock integration'
           echo 'Corrected v0.0.1 notes: the original project supplies almost all media and PS Vita features.' >> "$GITHUB_STEP_SUMMARY"
 
   stage-tested-cobalt:
