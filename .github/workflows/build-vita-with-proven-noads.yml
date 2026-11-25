@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'experiments/cobalt/vita/port_virtual_memory.cpp'
+      - 'experiments/cobalt/vita/port_media_session.cpp'
+      - 'experiments/cobalt/vita/port_player.cpp'
+      - 'tools/test_sponsorblock_threading.cjs'
       - 'tools/test_vm_data_mappings.cjs'
       - '.github/workflows/build-vita-with-proven-noads.yml'
       - '.github/workflows/build-vita.yml'
@@ -21,8 +24,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Check V8 memory fix
-        run: node tools/test_vm_data_mappings.cjs
+      - name: Check V8 memory mapping and MediaSession threading
+        run: |
+          node tools/test_vm_data_mappings.cjs
+          node tools/test_sponsorblock_threading.cjs
       - name: Download exact previous working Cobalt (25 Nov 2026)
         uses: actions/download-artifact@v4
         with:
