@@ -36,7 +36,8 @@ jobs:
         run: |
           set -euo pipefail
           export SB_API_VERSION=15
-          docker compose build --build-arg BASE_OS=docker.io/library/debian --build-arg BASE_OS_TAG=bullseye base
+          # Debian 11 LTS ended in August 2026; use supported Debian 12 for host tools.
+          docker compose build --pull --build-arg BASE_OS=docker.io/library/debian --build-arg BASE_OS_TAG=bookworm base
           docker compose build build-base
           docker compose build build-evergreen
           df -h
