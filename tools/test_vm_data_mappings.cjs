@@ -29,6 +29,6 @@ assert.match(protect,/flags!=0/,
   'Do not revoke memory on decommit; keep V8 data pages mapped');
 assert.match(unmap,/sceKernelFreeMemBlock\(/,
   'Unmap must still release whole blocks');
-assert.match(source,/kSbMemoryMapProtectReadWrite\|\s*kSbMemoryMapProtectExec/,
+assert.match(source,/\(flags&kSbMemoryMapProtectExec\)\s*&&\s*\(flags&kSbMemoryMapProtectWrite\)/,
   'W+X must remain forbidden');
 console.log('PS Vita V8 heap mapping policy and W^X regression guards: PASS');
