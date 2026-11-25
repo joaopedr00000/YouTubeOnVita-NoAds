@@ -9,6 +9,9 @@ on:
   push:
     branches: [main]
     paths: ['CMakeLists.txt', 'experiments/**', 'tools/**', '.github/workflows/build-vita.yml']
+  pull_request:
+    branches: [main]
+    paths: ['CMakeLists.txt', 'experiments/**', 'tools/**', '.github/workflows/build-vita.yml']
 concurrency:
   group: vita-build-${{ github.ref }}-${{ inputs.custom_cobalt == true && 'candidate' || 'baseline' }}
   cancel-in-progress: true
@@ -25,6 +28,7 @@ jobs:
       - name: Test experimental source-only JSON filter
         run: |
           node tools/test_cobalt_adblock.cjs
+          node tools/test_sponsorblock_threading.cjs
           python3 -m py_compile tools/prepare_cobalt_adblock.py
       - name: Fetch verified upstream Cobalt runtime and headers (partial filtering only)
         shell: bash
