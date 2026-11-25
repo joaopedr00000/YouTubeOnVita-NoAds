@@ -1,0 +1,132 @@
+name: Restore corrected v0.0.1 notes and publish tested-built v0.0.2 VPKs
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/recover-releases-once.yml']
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: recover-v0.0.1-and-publish-v0.0.2
+  cancel-in-progress: false
+jobs:
+  publish-existing-artifacts:
+    if: github.repository == 'joaopedr00000/YouTubeOnVita-NoAds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve exact previously released v0.0.1 Full and Lite VPKs
+        uses: actions/download-artifact@v4
+        with:
+          repository: ${{ github.repository }}
+          run-id: 45655074267
+          name: YouTubeOnVita-experimental-cobalt-VPKs
+          github-token: ${{ github.token }}
+          path: release-assets/v001
+      - name: Retrieve exact successfully built v0.0.2 Full and Lite VPKs
+        uses: actions/download-artifact@v4
+        with:
+          repository: ${{ github.repository }}
+          run-id: 45675201979
+          name: YouTubeOnVita-experimental-cobalt-VPKs
+          github-token: ${{ github.token }}
+          path: release-assets/v002
+      - name: Verify originals, Vita app metadata, content and matching Cobalt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, pathlib, zipfile, struct
+          cobalt='1aa4c117417f943e5f6595edcdf5ab462ab4f6e6f1074829bd3111538291a7c4'
+          old_shas={
+            'Full':'069d54447de6609fdd07e0c4a716566db0533259593d4668566f11132d732b9d',
+            'Lite':'8c2d88416e4b2372baad329034381c7c4a0d18755787461e1fea67f937ea89cf'}
+          def sfo(data):
+            magic,vers,kpos,vpos,count=struct.unpack_from('<4sIIII',data,0)
+            assert magic==b'\x00PSF'
+            result={}
+            for i in range(count):
+              off,fmt,typ,size,cap,valoff=struct.unpack_from('<HBBIII',data,20+i*16)
+              key=data[kpos+off:].split(b'\x00',1)[0].decode('ascii')
+              value=data[vpos+valoff:vpos+valoff+size].rstrip(b'\x00')
+              result[key]=value.decode('utf-8','replace')
+            return result
+          for version in ('v001','v002'):
+            for variant,expected_name,app_id in [('Full','YouTube','YTVNX0001'),
+                                                  ('Lite','YouTube Lite','YTVNX0002')]:
+              old=version=='v001'
+              filename=f'YouTube-Candidate-{variant}.vpk' if old else f'YouTube-{variant}.vpk'
+              src=pathlib.Path('release-assets')/version/filename
+              assert src.is_file() and src.stat().st_size>1000000,src
+              if old:
+                assert hashlib.sha256(src.read_bytes()).hexdigest()==old_shas[variant],variant
+              with zipfile.ZipFile(src) as z:
+                assert z.testzip() is None,src
+                assert len(z.read('eboot.bin'))>100000
+                assert hashlib.sha256(z.read('libcobalt.so')).hexdigest()==cobalt
+                meta=sfo(z.read('sce_sys/param.sfo'))
+                assert meta['TITLE_ID']==app_id,meta
+                if not old:
+                  assert meta['APP_VER']=='00.02',meta
+                  assert meta['TITLE']==expected_name,meta
+                  assert 'Candidate' not in str(meta),meta
+                print(f'{version} {variant}: ZIP, eboot, title ID, app metadata and Cobalt verified')
+              dest=pathlib.Path('release-assets')/version/f'YouTube-{variant}-v0.0.{"1" if old else "2"}.vpk'
+              src.rename(dest)
+          PY
+          (cd release-assets/v002 && sha256sum YouTube-*-v0.0.2.vpk > SHA256SUMS.txt)
+      - name: Ensure corrected v0.0.1 public release and preserve its verified assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.1" >/dev/null 2>&1; then
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.1" --jq '.id')
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$id" \
+              -f "body=$(cat RELEASE_NOTES_v0.0.1.md)" --jq '{id,name,tag_name}'
+            echo 'Updated existing v0.0.1 release body; no assets changed.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh release create v0.0.1 \
+              release-assets/v001/YouTube-Full-v0.0.1.vpk \
+              release-assets/v001/YouTube-Lite-v0.0.1.vpk \
+              --repo "$GITHUB_REPOSITORY" \
+              --target 'fa82c60ecd7673800c9750ba7bc98f698e97a922' \
+              --title 'YouTubeOnVita v0.0.1 — First Public Fork Release' \
+              --notes-file RELEASE_NOTES_v0.0.1.md
+            echo 'Restored missing v0.0.1 release with exactly verified original VPKs and corrected attribution.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.1" \
+            --jq '.body' | grep -Fq 'SponsorBlock integration'
+      - name: Publish v0.0.2 with correct original-project attribution
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.2" >/dev/null 2>&1; then
+            echo 'v0.0.2 already exists: refusing duplicate release.' >&2
+            exit 1
+          fi
+          gh release create v0.0.2 \
+            release-assets/v002/YouTube-Full-v0.0.2.vpk \
+            release-assets/v002/YouTube-Lite-v0.0.2.vpk \
+            release-assets/v002/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'YouTubeOnVita-NoAds v0.0.2 — Independent Fork Update' \
+            --notes-file RELEASE_NOTES_v0.0.2.md \
+            --prerelease
+      - name: Verify release URLs, notes and asset counts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.1" \
+            --jq '{tag_name,asset_count:(.assets|length),name}'
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.2" \
+            --jq '{tag_name,asset_count:(.assets|length),prerelease,name}'
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.1" --jq '.assets|length')" -eq 2
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.2" --jq '.assets|length')" -eq 3
