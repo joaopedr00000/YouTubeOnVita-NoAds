@@ -5,12 +5,18 @@ Versão de referência: v0.0.1 já publicada, com build Full/Lite validada no Gi
 
 ## P0 — Corrigir o nome da aplicação
 
-- [ ] Trocar o nome exibido no LiveArea/param.sfo de **YouTube Candidate** por **YouTube** e de **YouTube Candidate Lite** por **YouTube Lite**.
-- [ ] Em `CMakeLists.txt`, atualizar **somente** os nomes de exibição para o modo com `YTV_CUSTOM_COBALT_DIR`, que hoje os define explicitamente (linhas próximas de 395–401).
+- [x] Preparado em branch de desenvolvimento: trocar o nome exibido no LiveArea/param.sfo de **YouTube Candidate** por **YouTube** e de **YouTube Candidate Lite** por **YouTube Lite**. **Ainda não compilado nem testado.**
+- [x] Preparado em `CMakeLists.txt` para o modo com `YTV_CUSTOM_COBALT_DIR`; manter a verificação após a futura compilação.
 - [ ] **Preservar os Title IDs `YTVNX0001` e `YTVNX0002`** para atualização in-place e preservação das bolhas já instaladas. Não substituí-los por `YTVCB0001/0002`, que correspondem a outra modalidade de pacote.
-- [ ] Padronizar nome do VPK de distribuição e dos outputs internos (incluindo `.github/workflows/build-vita.yml`), mantendo as verificações para empacotar o Cobalt personalizado correto.
-- [ ] Corrigir a versão interna passada ao VitaSDK: workflow atual usa `YTV_COBALT_APP_VERSION=00.65`, herdada da versão original, apesar de o fork já ter release v0.0.1. Aplicar numeração coerente ao futuro v0.0.2, verificando o formato SFO aceito, sem tocar no release existente.
+- [x] Preparado: nomes internos `YouTube-Full.vpk` e `YouTube-Lite.vpk` no modo personalizado; adaptados `CMakeLists.txt` e `.github/workflows/build-vita.yml`, preservando validação de hash do Cobalt. **A testar antes do release.**
+- [x] Preparado para **v0.0.2**: `YTV_COBALT_APP_VERSION=00.02` no workflow e como padrão do CMake, correspondente ao formato interno `NN.NN` do Vita SFO. Ainda falta validar o arquivo `param.sfo` na futura build. A v0.0.1 publicada permanece intacta.
 - [ ] Futuramente testar a instalação por cima da v0.0.1, preservando `ux0:data/youtubevita/` e evitando bolha duplicada.
+
+## Identidade do fork para a v0.0.2
+
+- [x] Adicionar assinatura pública **Proudly made in 🇧🇷**, usando a bandeira, sem escrever o nome do país na assinatura.
+- [x] README passa a identificar este fork e preservar os créditos do port original.
+- [ ] Quando houver build, conferir a apresentação correta da assinatura nas páginas públicas e considerar uso de arte específica se for exibida dentro do Vita (o suporte a emoji da fonte não está confirmado).
 
 ## P0 — Investigar distorções visuais intermitentes
 

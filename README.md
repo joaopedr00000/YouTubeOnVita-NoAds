@@ -20,7 +20,10 @@
 <div align="center">
 
 _Unofficial client for PS Vita_
+
 **The real YouTube on TV experience, brought to PlayStation Vita through Cobalt.**
+
+**This fork is proudly made in 🇧🇷**
 
 </div>
 <br>
@@ -35,13 +38,13 @@ _Unofficial client for PS Vita_
 <p align="center">
   <a href="#overview"><img src="https://img.shields.io/badge/PLATFORM-PS%20VITA-006fcd?style=for-the-badge&logo=playstation&logoColor=white" alt="Platform"></a>&nbsp;&nbsp;
   <a href="#how-it-works"><img src="https://img.shields.io/badge/ENGINE-COBALT%20%2B%20STARBOARD-455a64?style=for-the-badge" alt="Engine"></a>&nbsp;&nbsp;
-  <a href="#download"><img src="https://img.shields.io/badge/RELEASE-v0.65%20FULL%20%2B%20LITE-2ea44f?style=for-the-badge" alt="Latest Release"></a>&nbsp;&nbsp;
-  <a href="https://github.com/WolffsRoom/YouTubeOnVita/releases"><img src="https://img.shields.io/github/downloads/WolffsRoom/YouTubeOnVita/total?style=for-the-badge&color=blue&logo=github" alt="Total Downloads"></a>
+  <a href="#download"><img src="https://img.shields.io/badge/RELEASE-v0.0.1%20FULL%20%2B%20LITE-2ea44f?style=for-the-badge" alt="Latest Release"></a>&nbsp;&nbsp;
+  <a href="https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases"><img src="https://img.shields.io/github/downloads/joaopedr00000/YouTubeOnVita-NoAds/total?style=for-the-badge&color=blue&logo=github" alt="Total Downloads"></a>
 </p>
 
 
 <div align="center">
-  <p><em>An independent homebrew project by <a href="https://github.com/WolffsRoom">Wolff's Room</a>.</em></p>
+  <p><em>Independent fork maintained by <a href="https://github.com/joaopedr00000">joaopedr00000</a>, proudly made in 🇧🇷. Based on the original homebrew port by <a href="https://github.com/WolffsRoom">Wolff's Room</a>.</em></p>
   <a id="support-this-and-other-projects"></a>
 
   <em>If you enjoy my work, consider supporting the development!</em>
@@ -85,8 +88,8 @@ _Unofficial client for PS Vita_
 
 | Version | Download | Memory | Recommended use |
 |:--|:--|:--|:--|
-| **YouTube Full** | **[YouTube.vpk](https://github.com/WolffsRoom/YouTubeOnVita/releases/download/v0.65/YouTube.vpk)** | Extended RAM | **Recommended:** more memory available to the player |
-| **YouTube Lite** | **[YouTube-Lite.vpk](https://github.com/WolffsRoom/YouTubeOnVita/releases/download/v0.65/YouTube-Lite.vpk)** | Normal RAM | Lower memory footprint, better coexistence with suspended applications |
+| **YouTube Full** | **[YouTube-Full-v0.0.1.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.1/YouTube-Full-v0.0.1.vpk)** | Extended RAM | **Recommended:** more memory available to the player |
+| **YouTube Lite** | **[YouTube-Lite-v0.0.1.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.1/YouTube-Lite-v0.0.1.vpk)** | Normal RAM | Lower memory footprint, better coexistence with suspended applications |
 
 ### Requirements
 
@@ -96,7 +99,7 @@ _Unofficial client for PS Vita_
 ### Install and update
 
 Install using **FMVita/VitaShell** or the [**Wolff's Store**](https://wolffsroom.github.io/WolffsRoomSite/).
-Both editions can be installed side by side, with separate LiveArea bubbles (**YTVCB0001** / **YTVCB0002**). To update, install the new VPK over the old one. Settings and account-session data are stored in `ux0:data/youtubevita/`. Do not delete this folder when updating.
+Both editions can be installed side by side, with separate LiveArea bubbles (**YTVNX0001** / **YTVNX0002**). To update, install the new VPK over the old one. Settings and account-session data are stored in `ux0:data/youtubevita/`. Do not delete this folder when updating.
 
 > [!TIP]
 > **Crash right after the startup animation?**
@@ -378,7 +381,9 @@ Older detailed technical notes are preserved in [Development Notes Archive](docs
 
 ## Credits and Disclaimer
 
-**Port and development:** [Wolff's Room](https://github.com/WolffsRoom)
+**This fork:** [joaopedr00000](https://github.com/joaopedr00000) — proudly made in 🇧🇷.
+
+**Original port and development:** [Wolff's Room](https://github.com/WolffsRoom)
 
 This project builds upon the work of:
 
@@ -428,7 +433,7 @@ Use the software responsibly, in accordance with applicable service terms and la
 
 *Unofficial client for PS Vita*
 
-*Real TV frontend. Native Vita integration. v0.65.*
+*Real TV frontend. Native Vita integration. Fork release v0.0.1 (v0.0.2 in development).*
 
 **Vita means life!**
 
