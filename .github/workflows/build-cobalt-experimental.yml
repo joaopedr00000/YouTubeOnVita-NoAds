@@ -4,10 +4,21 @@ on:
   push:
     branches: [main]
     paths: ['.github/workflows/build-cobalt-experimental.yml', 'tools/cobalt_adblock_preload.js', 'tools/test_cobalt_adblock.cjs', 'tools/prepare_cobalt_adblock.py', 'tools/prepare_vita_cobalt_profile.py', 'experiments/cobalt/vita/relocate_elf.c', 'CMakeLists.txt', '.github/workflows/build-vita.yml']
+  pull_request:
+    branches: [main]
+    paths:
+      - 'experiments/cobalt/vita/port_virtual_memory.cpp'
+      - 'experiments/cobalt/vita/port_media_session.cpp'
+      - '.github/workflows/build-cobalt-experimental.yml'
+      - '.github/workflows/build-vita.yml'
+      - 'tools/prepare_cobalt_adblock.py'
+      - 'tools/prepare_vita_cobalt_profile.py'
+      - 'tools/cobalt_adblock_preload.js'
+      - 'tools/test_vm_data_mappings.cjs'
 permissions:
   contents: read
 concurrency:
-  group: cobalt-source-experimental
+  group: cobalt-source-experimental-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   cobalt:
@@ -18,6 +29,7 @@ jobs:
       - name: Validate preload fixtures
         run: |
           node tools/test_cobalt_adblock.cjs
+          node tools/test_vm_data_mappings.cjs
           python3 -m py_compile tools/prepare_cobalt_adblock.py tools/prepare_vita_cobalt_profile.py
       - name: Free runner disk for Cobalt toolchains
         run: |
