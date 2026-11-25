@@ -45,6 +45,7 @@
 #include "addon_font.h"
 #include "addon_font_bold.h"
 #include "port_download_entries.h"
+#include "ytv_adblock_dns.h"
 
 extern "C" void ytv_vita_lifecycle_send(SbEventType type, void* data);
 extern "C" SbWindow ytv_vita_current_window();
@@ -69,7 +70,7 @@ extern volatile int g_ytv_hud_video_h;             // port_player.cpp
 extern "C" volatile size_t g_vgl_free_vram, g_vgl_free_ram, g_vgl_free_phy;  // port_graphics.cpp
 extern volatile unsigned g_ytv_hud_dropped_total;  // port_player.cpp
 // Read atomically in the Starboard DNS worker threads.
-extern "C" { int g_ytv_adblock_enabled = 0; }
+extern "C" { int g_ytv_adblock_enabled = 1; }
 // Video decoder texture sampler only. 1=legacy bilinear, 0=nearest/clearer.
 extern "C" { volatile int g_ytv_video_bilinear_enabled = 1; }
 extern "C" { volatile int g_ytv_video_aspect_mode = 0; }
@@ -1118,8 +1119,7 @@ void load_cfg() {
   sceIoClose(fd);
   if (n<=0) return;
   if (strstr(buf,"lr=0")) g_lr_enabled=false;
-  if (strstr(buf,"adblock=1"))
-    __atomic_store_n(&g_ytv_adblock_enabled,1,__ATOMIC_RELAXED);
+  __atomic_store_n(&g_ytv_adblock_enabled,ytv_adblock_config_enabled(buf,(size_t)n),__ATOMIC_RELAXED);
   if (strstr(buf,"quality=360")) g_quality_idx=0;
   if (strstr(buf,"quality=480")) g_quality_idx=1;
   if (strstr(buf,"quality=720")) g_quality_idx=2;
@@ -1715,6 +1715,16 @@ void ytv_addons_fhd_ok() {
   }
   pthread_mutex_unlock(&g_fhd_guard_mutex);
   if(armed)SbLogRaw("YTV_LIFECYCLE_ADDON fhd=decoded_30_frames\n");
+}
+
+// Load the DNS preference before Cobalt can issue its first request.
+void ytv_addons_load_adblock_config() {
+  char buf[320]={};
+  SceUID fd=sceIoOpen(kAddonCfg,SCE_O_RDONLY,0);
+  int n=0;
+  if(fd>=0){n=sceIoRead(fd,buf,sizeof(buf)-1);sceIoClose(fd);}
+  __atomic_store_n(&g_ytv_adblock_enabled,
+      ytv_adblock_config_enabled(buf,n>0?(size_t)n:0),__ATOMIC_RELAXED);
 }
 
 // Main thread, every loop iteration.
