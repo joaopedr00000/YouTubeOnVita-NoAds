@@ -219,7 +219,13 @@ bool sb_schedule_action_locked(SbActionKind kind,double seek=0.0){
   sb_action_event=SbEventSchedule(sb_action_on_main,nullptr,0);
   if(!sb_action_event){
     sb_action=kSbNoAction;sb_action_seek=0.0;sb_action_generation=0;
-    SbLogRaw("YTV_SPONSORBLOCK action_schedule_failed\n");
+    // A full Starboard event queue must not cause unbounded disk logging.
+    static uint64_t last_failure_log=0;
+    const uint64_t now=sceKernelGetSystemTimeWide();
+    if(now-last_failure_log>30000000ull){
+      last_failure_log=now;
+      SbLogRaw("YTV_SPONSORBLOCK action_schedule_failed\n");
+    }
     return false;
   }
   return true;
