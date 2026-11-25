@@ -28,6 +28,8 @@ _Unofficial client for PS Vita_
 </div>
 <br>
 
+**Most playback features and built-in tools listed below are inherited from the original YouTubeOnVita project by Wolff's Room. The key functional addition in this fork is SponsorBlock integration; the fork also carries separate experimental filtering, memory diagnostics, and compatibility work.**
+
 **YouTubeOnVita** runs the genuine **YouTube on TV** interface on **PlayStation Vita**, powered by Cobalt and Starboard 15. It is **not** a custom recreation. Browse, search, sign in and watch videos using native buttons and touchscreen input, without a companion PC or streaming server. The early handmade prototype is archived in `legacy/native-mock-v001/` and is not part of this release.
 
 > [!IMPORTANT]
@@ -38,7 +40,7 @@ _Unofficial client for PS Vita_
 <p align="center">
   <a href="#overview"><img src="https://img.shields.io/badge/PLATFORM-PS%20VITA-006fcd?style=for-the-badge&logo=playstation&logoColor=white" alt="Platform"></a>&nbsp;&nbsp;
   <a href="#how-it-works"><img src="https://img.shields.io/badge/ENGINE-COBALT%20%2B%20STARBOARD-455a64?style=for-the-badge" alt="Engine"></a>&nbsp;&nbsp;
-  <a href="#download"><img src="https://img.shields.io/badge/RELEASE-v0.0.1%20FULL%20%2B%20LITE-2ea44f?style=for-the-badge" alt="Latest Release"></a>&nbsp;&nbsp;
+  <a href="#download"><img src="https://img.shields.io/badge/RELEASE-v0.0.2%20FULL%20%2B%20LITE-2ea44f?style=for-the-badge" alt="Latest Release"></a>&nbsp;&nbsp;
   <a href="https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases"><img src="https://img.shields.io/github/downloads/joaopedr00000/YouTubeOnVita-NoAds/total?style=for-the-badge&color=blue&logo=github" alt="Total Downloads"></a>
 </p>
 
@@ -88,8 +90,8 @@ _Unofficial client for PS Vita_
 
 | Version | Download | Memory | Recommended use |
 |:--|:--|:--|:--|
-| **YouTube Full** | **[YouTube-Full-v0.0.1.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.1/YouTube-Full-v0.0.1.vpk)** | Extended RAM | **Recommended:** more memory available to the player |
-| **YouTube Lite** | **[YouTube-Lite-v0.0.1.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.1/YouTube-Lite-v0.0.1.vpk)** | Normal RAM | Lower memory footprint, better coexistence with suspended applications |
+| **YouTube Full** | **[YouTube-Full-v0.0.2.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.2/YouTube-Full-v0.0.2.vpk)** | Extended RAM | **Recommended:** more memory available to the player |
+| **YouTube Lite** | **[YouTube-Lite-v0.0.2.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.2/YouTube-Lite-v0.0.2.vpk)** | Normal RAM | Lower memory footprint, better coexistence with suspended applications |
 
 ### Requirements
 
@@ -99,7 +101,7 @@ _Unofficial client for PS Vita_
 ### Install and update
 
 Install using **FMVita/VitaShell** or the [**Wolff's Store**](https://wolffsroom.github.io/WolffsRoomSite/).
-Both editions can be installed side by side, with separate LiveArea bubbles (**YTVNX0001** / **YTVNX0002**). To update, install the new VPK over the old one. **The current v0.0.1 release** stores settings and account-session data in `ux0:data/youtubevita/`. Do not delete that directory when updating. **The upcoming v0.0.2 fork (development only)** uses a separate directory, `ux0:data/youtubevita-noads/`, so it does not share sessions, settings, downloads, or logs with the original app. It will not automatically copy login tokens from the old directory: sign in again after installing a future v0.0.2 build. See [fork data isolation notes](docs/FORK_DATA_ISOLATION_V0_0_2.md).
+Both editions can be installed side by side, with separate LiveArea bubbles (**YTVNX0001** / **YTVNX0002**). To update, install the new VPK over the old one. **Fork v0.0.2** stores sessions, settings, downloads, cache and logs under `ux0:data/youtubevita-noads/`, separate from the original application's directory. v0.0.1 used `ux0:data/youtubevita/`; **v0.0.2 does not automatically migrate credentials or other files**. Sign in again after updating; do not delete the old data directory. See [fork data isolation notes](docs/FORK_DATA_ISOLATION_V0_0_2.md).
 
 > [!TIP]
 > **Crash right after the startup animation?**
@@ -110,6 +112,8 @@ Also available through **[Wolff's Room](https://wolffsroom.github.io/WolffsRoomS
 ---
 
 ## Features
+
+**Credit:** The following YouTube TV, video playback, downloads and native PS Vita tools are mainly features of the original project. They are listed for compatibility, **not as new developments introduced by this fork**.
 
 - The **real YouTube on TV** interface: browsing, search, sign-in and player controls.
 - Native **buttons, touchscreen and microphone integration**.
@@ -166,7 +170,7 @@ Open **Add-ons** with **SELECT** or a three-finger tap. These tools extend the o
 |:--|:--|
 | **Player settings** | Download, screenshots, sleep timer (from 5 min), Black Screen, Darken Screen, Video filtering, Aspect Ratio and Vertical (Shorts) |
 | **Downloads** | MP4 video or locally encoded MP3 audio, saved list with 5 items per page |
-| **Settings** | Download quality and format, partial AdBlock, L/R controls, input lock, language and Inverted screen |
+| **Settings** | Download quality and format, L/R controls, input lock, language, Inverted screen, and a dedicated **Modifications** submenu for the independent playback filters |
 | **Screen and info** | Full HD (beta), performance, clock, battery, UI sounds and UI sounds volume |
 | **Vita Settings** | System Settings shortcut (subject to available memory) |
 
@@ -186,7 +190,7 @@ Open **Add-ons** with **SELECT** or a three-finger tap. These tools extend the o
 
 ### MP4 and MP3 downloads
 
-Save available videos as **MP4** or encode audio locally to **MP3 (160 kbps)**. New MP3s may include **1:1 square cover art**. Files are saved to `ux0:data/youtubevita/downloads/`.
+Save available videos as **MP4** or encode audio locally to **MP3 (160 kbps)**. New MP3s may include **1:1 square cover art**. With fork v0.0.2, files are saved to `ux0:data/youtubevita-noads/downloads/`.
 
 Available qualities depend on YouTube's provided streams. Only download content you have permission to save.
 
@@ -310,7 +314,7 @@ These measures help protect local data but do **not** make the client an officia
 - Certain video formats, DRM-protected content and Full HD streams may not work.
 - The YouTube service may change on uncertified devices.
 
-For crash reports, share reproduction steps and the applicable logs (`ux0:data/youtubevita/` for the published v0.0.1, or `ux0:data/youtubevita-noads/` for the future v0.0.2), **not stored account or session data**.
+For crash reports, share reproduction steps and the applicable logs (`ux0:data/youtubevita/` for v0.0.1, or `ux0:data/youtubevita-noads/` for v0.0.2), **not stored account or session data**.
 
 ---
 
@@ -433,7 +437,7 @@ Use the software responsibly, in accordance with applicable service terms and la
 
 *Unofficial client for PS Vita*
 
-*Real TV frontend. Native Vita integration. Fork release v0.0.1 (v0.0.2 in development).*
+*Real TV frontend by Wolff's Room. Independent fork v0.0.2.*
 
 **Vita means life!**
 

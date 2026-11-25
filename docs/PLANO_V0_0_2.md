@@ -27,6 +27,14 @@ Versão de referência: v0.0.1 já publicada, com build Full/Lite validada no Gi
 - [ ] Confirmar em hardware que os dois aplicativos não compartilham dados. A primeira execução da v0.0.2 exigirá novo login e terá configurações padrão; os arquivos anteriores permanecerão intocados.
 - [ ] Antes da próxima release, revisar documentação dos caminhos de logs/testes e confirmar que Cobalt obtém os novos diretórios da plataforma.
 
+## P0 — Tela Modificações (v0.0.2)
+
+- [x] Adicionada uma página de **Modificações** dentro de Configurações, contendo AdBlock e SponsorBlock independentes.
+- [x] Ajustados os controles X/toque/setas, a volta ao menu Configurações e a gravação das opções no `addons.cfg` do fork.
+- [x] SponsorBlock desativado por padrão; restante do frontend e recursos de mídia herdados do projeto original.
+- [x] Teste estático `tools/test_modifications_menu.cjs` incluído no fluxo de build.
+- [ ] Testar a navegação em hardware real. O filtro inserido no Cobalt construído da fonte é independente do seletor nativo de AdBlock; não anunciar que desativá-lo desliga todas as camadas.
+
 ## P0 — Investigar distorções visuais intermitentes
 
 **Evidência disponível:** relato de imagem ocasionalmente distorcida. Ainda não há imagem, gravação ou log sincronizado que indique se a corrupção aparece nos quadros do vídeo ou nos elementos da interface. As hipóteses abaixo não são causas confirmadas.
