@@ -100,7 +100,8 @@ constexpr float kMenuBackdropOpacity = 0.50f;
 
 // Native pages instead of modifying the proprietary YouTube TV DOM.
 enum Page { kPageNone, kPageHome, kPagePlayer, kPageSettings,
-            kPageDisplay, kPageDownload, kPageDownloads, kPageNetwork };
+            kPageDisplay, kPageDownload, kPageDownloads, kPageNetwork,
+            kPageModifications };
 Page g_page = kPageNone;
 Page g_player_return = kPageHome;
 Page g_downloads_return = kPageHome;
@@ -454,7 +455,8 @@ int page_count() {
   if (g_page == kPagePlayer) return 9;
   if (g_page == kPageDownload) return 5;
   if (g_page == kPageDownloads) return download_visible()+2;
-  if (g_page == kPageSettings) return 9;
+  if (g_page == kPageSettings) return 8;
+  if (g_page == kPageModifications) return 3;
   if (g_page == kPageDisplay) return 6;
   return 6;
 }
@@ -478,6 +480,7 @@ const char* menu_title() {
     case kPageDownload: return T("Download", "Baixar");
     case kPageDownloads: return "Downloads";
     case kPageSettings: return T("Settings", "Configurações");
+    case kPageModifications: return T("Modifications", "Modificações");
     case kPageDisplay: return T("Screen and info", "Tela e informações");
     default: return "Youtube on Vita";
   }
@@ -527,16 +530,19 @@ const char* item_text(int i) {
   }
   if (g_page == kPageSettings) {
     const char* labels[] = {
-      T("AdBlock (partial)", "AdBlock (parcial)"),
       T("Download quality", "Qualidade download"),
       T("Download format", "Formato download"),
       T("L / R buttons", "Botões L / R"),
       T("Lock input", "Bloquear entrada"),
       T("Language", "Idioma"),
       T("Inverted screen", "Tela invertida"),
-      T("SponsorBlock", "SponsorBlock"),
+      T("Modifications", "Modificações"),
       T("Back", "Voltar"),
     };
+    return labels[i];
+  }
+  if (g_page == kPageModifications) {
+    const char* labels[] = {T("AdBlock (partial)", "AdBlock (parcial)"), "SponsorBlock", T("Back", "Voltar")};
     return labels[i];
   }
   if (g_page == kPageDisplay) {
@@ -586,16 +592,16 @@ void icon_item(const Canvas& c, int i, float x, float y, uint32_t col, uint32_t 
     else icon_close(c,x,y,col);
   } else if (g_page == kPageSettings) {
     switch(i) {
-      case 0: icon_lock(c,x,y,col,bg); break;
-      case 1: icon_download(c,x,y,col); break;
-      case 2: icon_download(c,x,y,col); break;
-      case 4: icon_lock(c,x,y,col,bg); break;
-      case 3: icon_lr(c,x,y,col,bg); break;
-      case 5: icon_timer(c,x,y,col); break;
-      case 6: icon_screen_off(c,x,y,col,bg); break;
-      case 7: icon_timer(c,x,y,col); break;
+      case 0: case 1: icon_download(c,x,y,col); break;
+      case 2: icon_lr(c,x,y,col,bg); break;
+      case 3: icon_lock(c,x,y,col,bg); break;
+      case 4: icon_timer(c,x,y,col); break;
+      case 5: icon_screen_off(c,x,y,col,bg); break;
+      case 6: icon_gear(c,x,y,col,bg); break;
       default: icon_close(c,x,y,col); break;
     }
+  } else if (g_page == kPageModifications) {
+    if(i<2) icon_lock(c,x,y,col,bg); else icon_close(c,x,y,col);
   } else if (g_page == kPageDisplay) {
     switch(i) {
       case 0: icon_screen_off(c,x,y,col,bg); break;
@@ -665,14 +671,16 @@ const char* item_value(int i, const char* timer, char* scratch, size_t capacity)
   }
   if (g_page == kPageSettings) {
     switch(i) {
-      case 0: return __atomic_load_n(&g_ytv_adblock_enabled,__ATOMIC_RELAXED) ? T("On","Ligado") : T("Off","Desligado");
-      case 1: return kQualities[g_quality_idx];
-      case 2: return g_audio_only ? "MP3" : "MP4";
-      case 3: return g_lr_enabled ? T("On","Ligados") : T("Off","Desligados");
-      case 5: return g_language_pref == 0 ? T("System","Sistema") : (g_language_pref == 1 ? "PT-BR" : "English");
-      case 6: return __atomic_load_n(&g_ytv_screen_flip,__ATOMIC_RELAXED) ? T("On","Ligada") : T("Off","Desligada");
-      case 7: { const int mode=__atomic_load_n(&g_ytv_sponsorblock_mode,__ATOMIC_RELAXED); return mode==2 ? T("Extended","Ampliado") : mode==1 ? T("Sponsors","Patrocinios") : T("Off","Desligado"); }
+      case 0: return kQualities[g_quality_idx];
+      case 1: return g_audio_only ? "MP3" : "MP4";
+      case 2: return g_lr_enabled ? T("On","Ligados") : T("Off","Desligados");
+      case 4: return g_language_pref == 0 ? T("System","Sistema") : (g_language_pref == 1 ? "PT-BR" : "English");
+      case 5: return __atomic_load_n(&g_ytv_screen_flip,__ATOMIC_RELAXED) ? T("On","Ligada") : T("Off","Desligada");
     }
+  }
+  if (g_page == kPageModifications) {
+    if(i==0) return __atomic_load_n(&g_ytv_adblock_enabled,__ATOMIC_RELAXED) ? T("On","Ligado") : T("Off","Desligado");
+    if(i==1) return __atomic_load_n(&g_ytv_sponsorblock_mode,__ATOMIC_RELAXED) ? T("On","Ligado") : T("Off","Desligado");
   }
   if (g_page == kPageDisplay) {
     switch(i) {
@@ -1035,6 +1043,7 @@ void open_page(Page page) {
                      page == kPageDownload ? "download_format" :
                      page == kPageDownloads ? "downloads_list" :
                      page == kPageSettings ? "settings" :
+                     page == kPageModifications ? "modifications" :
                      page == kPageDisplay ? "display" : "home";
   char msg[80];
   snprintf(msg,sizeof(msg),"YTV_LIFECYCLE_ADDON menu=%s\n",name);
@@ -1068,8 +1077,9 @@ void menu_back() {
     g_network_next_prompt=now_us()+6000000ull;
   }
   else if (g_page == kPagePlayer && g_player_return == kPageNone) open_menu(false);
-  else if (g_page == kPagePlayer && g_player_return == kPageSettings)
-    open_page(kPageSettings);
+  else if (g_page == kPagePlayer && (g_player_return == kPageSettings || g_player_return == kPageModifications))
+    open_page(g_player_return);
+  else if (g_page == kPageModifications) open_page(kPageSettings);
   else open_page(kPageHome);
 }
 void update_language() {
@@ -1210,20 +1220,25 @@ void adjust_item(int delta) {
                      "YTV_LIFECYCLE_VIDEO_FILTER mode=nearest apply=next_video\n");
   } else if (g_page==kPageSettings) {
     switch(g_sel) {
-      case 7: { const int mode=(__atomic_load_n(&g_ytv_sponsorblock_mode,__ATOMIC_RELAXED)+3+delta)%3; __atomic_store_n(&g_ytv_sponsorblock_mode,mode,__ATOMIC_RELAXED); save_cfg(); break; }
-      case 0: toggle_adblock(); break;
-      case 1: g_quality_idx=(g_quality_idx+3+delta)%3;save_cfg();break;
-      case 2: g_audio_only=!g_audio_only;save_cfg();break;
-      case 3: set_lr(!g_lr_enabled);break;
-      case 5: g_language_pref=(g_language_pref+3+delta)%3;
-              update_language();save_cfg();break;
-      case 6: {
+      case 0: g_quality_idx=(g_quality_idx+3+delta)%3;save_cfg();break;
+      case 1: g_audio_only=!g_audio_only;save_cfg();break;
+      case 2: set_lr(!g_lr_enabled);break;
+      case 4: g_language_pref=(g_language_pref+3+delta)%3; update_language();save_cfg();break;
+      case 5: {
         const int on=!__atomic_load_n(&g_ytv_screen_flip,__ATOMIC_RELAXED);
         __atomic_store_n(&g_ytv_screen_flip,on,__ATOMIC_RELAXED);
         save_cfg();
         log_line(on?"YTV_LIFECYCLE_SCREEN_FLIP on=1\n":"YTV_LIFECYCLE_SCREEN_FLIP on=0\n");
         break;
       }
+    }
+  } else if (g_page==kPageModifications) {
+    if(g_sel==0) toggle_adblock();
+    else if(g_sel==1) {
+      const int on=!__atomic_load_n(&g_ytv_sponsorblock_mode,__ATOMIC_RELAXED);
+      __atomic_store_n(&g_ytv_sponsorblock_mode,on,__ATOMIC_RELAXED);
+      save_cfg();
+      log_line(on?"YTV_SPONSORBLOCK enabled\n":"YTV_SPONSORBLOCK disabled\n");
     }
   } else if (g_page==kPageDisplay) {
     char msg[64];
@@ -1384,14 +1399,17 @@ void activate(int item) {
     } else if(item==n+1)menu_back();
   } else if (g_page==kPageSettings) {
     switch(item) {
-      case 0: case 1: case 2: case 3: case 5: case 6: case 7: adjust_item(1);break;
-      case 4: open_menu(false);g_input_locked=true;
+      case 0: case 1: case 2: case 4: case 5: adjust_item(1);break;
+      case 3: open_menu(false);g_input_locked=true;
               ytv_ui_sound(12);  // controls lock
               log_line("YTV_LIFECYCLE_ADDON input_locked=1\n");
               show_toast(T("Input locked. SELECT unlocks",
                            "Entrada bloqueada. SELECT desbloqueia"),2500,4);break;
+      case 6: open_page(kPageModifications);break;
       default: menu_back();break;
     }
+  } else if (g_page==kPageModifications) {
+    if (item<2) adjust_item(1); else menu_back();
   } else if (g_page==kPageDisplay) {
     if (item>=0 && item<=4) adjust_item(1);
     else menu_back();
@@ -1525,8 +1543,8 @@ bool ytv_addons_input(uint32_t previous, uint32_t current) {
       ytv_ui_sound(1);
     }
     if ((g_page==kPagePlayer && (g_sel==2 || g_sel==4 || g_sel==5 || g_sel==6 || g_sel==7)) ||
-        (g_page==kPageSettings && (g_sel==0 || g_sel==1 ||
-                                  g_sel==2 || g_sel==3 || g_sel==5 || g_sel==6 || g_sel==7)) ||
+        (g_page==kPageSettings && (g_sel==0 || g_sel==1 || g_sel==2 || g_sel==4 || g_sel==5)) ||
+        (g_page==kPageModifications && g_sel<2) ||
         (g_page==kPageDisplay && g_sel<=4))
       {adjust_item(delta);ytv_ui_sound(1);}
   }
@@ -1613,8 +1631,10 @@ void ytv_addons_tap(float x, float y) {
       } else if (g_page==kPagePlayer && i==2 && px<kPanelW/3)
         adjust_item(-1);
       else if (g_page==kPageSettings &&
-               (i==0 || i==1 || i==2 || i==3 || i==5 || i==6 || i==7) &&
+               (i==0 || i==1 || i==2 || i==4 || i==5) &&
                px<kPanelW/3)
+        adjust_item(-1);
+      else if (g_page==kPageModifications && i<2 && px<kPanelW/3)
         adjust_item(-1);
       else if (g_page==kPagePlayer && (i==4 || i==5 || i==6 || i==7) && px<kPanelW/3)
         adjust_item(-1);

@@ -30,7 +30,7 @@ extern "C" void ytv_native_download_clear_video();
 #include <cstdlib>
 #include <algorithm>
 
-extern "C" { int g_ytv_sponsorblock_mode = 1; }
+extern "C" { int g_ytv_sponsorblock_mode = 0; }  // opt-in on this fork
 extern "C" int g_ytv_adblock_enabled;
 namespace {
 struct SbSegment { double start, end; bool attempted; };
