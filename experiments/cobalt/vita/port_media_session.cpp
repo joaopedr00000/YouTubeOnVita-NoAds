@@ -173,7 +173,7 @@ void* sb_worker(void*){
       continue;
     }
     if(mode && sb_playing && sb_invoke && sb_at && !id.empty()){
-      const uint64_t now=sceKernelGetProcessTimeWide();
+      const uint64_t now=sceKernelGetSystemTimeWide();
       const double pos=sb_pos+(now-sb_at)*0.000001*sb_rate;
       for(auto& s:segs){
         if(s.attempted || pos<s.start || pos>=s.end-0.15 ||
@@ -200,7 +200,7 @@ void sb_update(const char* id,const CobaltExtensionMediaSessionState& state){
     sb_pos=state.current_playback_position/1000000.0;
     sb_duration=state.duration/1000000.0;
     sb_rate=state.actual_playback_rate;
-    sb_at=sceKernelGetProcessTimeWide();
+    sb_at=sceKernelGetSystemTimeWide();
     sb_playing=state.actual_playback_state==kCobaltExtensionMediaSessionPlaying &&
       state.has_position_state && state.available_actions[kCobaltExtensionMediaSessionActionSeekto] &&
       sb_pos>=0 && sb_duration>0 && std::isfinite(sb_rate) && sb_rate>0 && sb_rate<=4;
