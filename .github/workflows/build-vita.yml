@@ -1,0 +1,71 @@
+name: Build Vita Full and Lite
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['CMakeLists.txt', 'experiments/**', 'tools/**', '.github/workflows/build-vita.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Fetch verified Cobalt runtime and headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p experiments/cobalt/evergreen/core25/lib
+          curl --fail --location --retry 3 https://github.com/youtube/cobalt/releases/download/25.lts.50/cobalt_evergreen_5.50.2_arm-hardfp_sbversion-15_release.crx -o "$RUNNER_TEMP/cobalt.crx"
+          echo "be5b93dc4dcd42bd8dea5bfda728e6a170a17d6eef913b2cf78d370ac5e011dd  $RUNNER_TEMP/cobalt.crx" | sha256sum -c -
+          python3 - "$RUNNER_TEMP/cobalt.crx" <<'PY'
+          import io, pathlib, struct, sys, zipfile
+          raw = pathlib.Path(sys.argv[1]).read_bytes()
+          assert raw[:4] == b'Cr24'
+          version = struct.unpack_from('<I', raw, 4)[0]
+          if version == 3:
+              offset = 12 + struct.unpack_from('<I', raw, 8)[0]
+          elif version == 2:
+              offset = 16 + sum(struct.unpack_from('<II', raw, 8))
+          else:
+              raise ValueError('Unsupported CRX version')
+          with zipfile.ZipFile(io.BytesIO(raw[offset:])) as z:
+              data = z.read('lib/libcobalt.so')
+              assert data[:6] == b'\x7fELF\x01\x01'
+              pathlib.Path('experiments/cobalt/evergreen/core25/lib/libcobalt.so').write_bytes(data)
+          PY
+          git clone --filter=blob:none --no-checkout https://github.com/youtube/cobalt.git experiments/cobalt/upstream-25
+          git -C experiments/cobalt/upstream-25 sparse-checkout init --cone
+          git -C experiments/cobalt/upstream-25 sparse-checkout set starboard
+          git -C experiments/cobalt/upstream-25 checkout --detach 762d9bfda894dd22cc5d47200f9994c3027514eb
+      - name: Fetch pinned HTTPS source
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/shorelight82/vitube-vpk.git third_party/vitube
+          git -C third_party/vitube sparse-checkout init --cone
+          git -C third_party/vitube sparse-checkout set external/vita-https
+          git -C third_party/vitube checkout --detach a8c4ac8405e13ca1ec6e7c64ae6d888649c9de9f
+      - name: Build both VPKs in VitaSDK
+        shell: bash
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src -e VITASDK=/usr/local/vitasdk vitasdk/vitasdk:latest bash -lc '
+            set -euo pipefail
+            export PATH="$VITASDK/bin:$PATH"
+            vdpm mbedtls
+            bash third_party/vitube/external/vita-https/tools/build-curl-mbedtls.sh
+            mkdir -p dist
+            for variant in Full Lite; do
+              lite=OFF; filename=YouTube.vpk
+              if [ "$variant" = Lite ]; then lite=ON; filename=YouTube-Lite.vpk; fi
+              cmake -S . -B "build-$variant" -DCMAKE_BUILD_TYPE=Release -DYTV_NATIVE_HARDENED_CURL=ON -DYTV_PACKAGE_LITE="$lite" -DYTV_COBALT_APP_VERSION=00.65 -DYTV_NATIVE_DOWNLOAD_TEST=OFF -DYTV_V061_RX_CHUNKS=ON -DYTV_V061_THREE_CORES=OFF
+              cmake --build "build-$variant" --target "$filename-vpk" -j4
+              cp "build-$variant/$filename" "dist/YouTube-NoAds-$variant.vpk"
+            done
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YouTubeOnVita-NoAds-VPKs
+          path: dist/*.vpk
+          if-no-files-found: error
