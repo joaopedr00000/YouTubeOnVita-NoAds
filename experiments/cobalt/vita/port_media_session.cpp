@@ -30,6 +30,7 @@ extern "C" void ytv_native_download_clear_video();
 #include <algorithm>
 
 extern "C" { int g_ytv_sponsorblock_mode = 0; }
+extern "C" int g_ytv_adblock_enabled;
 namespace {
 struct SbSegment { double start, end; bool attempted; };
 struct JsonToken { char type; size_t begin, end, next; };
@@ -152,6 +153,7 @@ std::string sb_id;
 uint64_t sb_generation=0,sb_at=0;
 double sb_pos=0,sb_duration=0,sb_rate=0;
 bool sb_playing=false,sb_worker_started=false;
+bool ad_skip_available=false,ad_skip_requested=false;
 void* sb_context=nullptr;
 CobaltExtensionMediaSessionInvokeActionCallback sb_invoke=nullptr;
 void sb_reset_locked(){
@@ -172,7 +174,16 @@ void* sb_worker(void*){
       loaded=generation;loaded_mode=mode;
       continue;
     }
-    if(mode && sb_playing && sb_invoke && sb_at && !id.empty()){
+    // Only request the supported MediaSession action when the frontend exposes it.
+    if(__atomic_load_n(&g_ytv_adblock_enabled,__ATOMIC_RELAXED) &&
+       ad_skip_available && !ad_skip_requested && sb_invoke){
+      CobaltExtensionMediaSessionActionDetails d;
+      CobaltExtensionMediaSessionActionDetailsInit(&d,kCobaltExtensionMediaSessionActionSkipad);
+      ad_skip_requested=true;
+      sb_invoke(d,sb_context);
+      SbLogRaw("YTV_ADBLOCK skipad requested\n");
+    }
+    if(mode && sb_playing && sb_invoke && sb_at && !id.empty() && !ad_skip_available){
       const uint64_t now=sceKernelGetSystemTimeWide();
       const double pos=sb_pos+(now-sb_at)*0.000001*sb_rate;
       for(auto& s:segs){
@@ -194,6 +205,9 @@ void* sb_worker(void*){
 }
 void sb_update(const char* id,const CobaltExtensionMediaSessionState& state){
   pthread_mutex_lock(&sb_mutex);
+  ad_skip_available=state.actual_playback_state!=kCobaltExtensionMediaSessionNone &&
+    state.available_actions[kCobaltExtensionMediaSessionActionSkipad];
+  if(!ad_skip_available)ad_skip_requested=false;
   if(!id || !*id){if(!sb_id.empty())sb_reset_locked();}
   else{
     if(sb_id!=id){sb_id=id;++sb_generation;}
@@ -204,11 +218,11 @@ void sb_update(const char* id,const CobaltExtensionMediaSessionState& state){
     sb_playing=state.actual_playback_state==kCobaltExtensionMediaSessionPlaying &&
       state.has_position_state && state.available_actions[kCobaltExtensionMediaSessionActionSeekto] &&
       sb_pos>=0 && sb_duration>0 && std::isfinite(sb_rate) && sb_rate>0 && sb_rate<=4;
-    if(!sb_worker_started){
-      pthread_t worker;
-      if(pthread_create(&worker,nullptr,sb_worker,nullptr)==0){
-        pthread_detach(worker);sb_worker_started=true;
-      }
+  }
+  if(!sb_worker_started && (ad_skip_available || !sb_id.empty())){
+    pthread_t worker;
+    if(pthread_create(&worker,nullptr,sb_worker,nullptr)==0){
+      pthread_detach(worker);sb_worker_started=true;
     }
   }
   pthread_mutex_unlock(&sb_mutex);
@@ -311,13 +325,13 @@ void on_update(CobaltExtensionMediaSessionState state){
 void register_callbacks(void* context,CobaltExtensionMediaSessionInvokeActionCallback invoke,
                         CobaltExtensionMediaSessionUpdatePlatformPlaybackStateCallback){
   pthread_mutex_lock(&sb_mutex);
-  sb_reset_locked();sb_context=context;sb_invoke=invoke;
+  sb_reset_locked();ad_skip_available=ad_skip_requested=false;sb_context=context;sb_invoke=invoke;
   pthread_mutex_unlock(&sb_mutex);
   SbLogRaw("YTV_MEDIA_SESSION_CALLBACK_REGISTERED\n");
 }
 void destroy_callbacks(){
   pthread_mutex_lock(&sb_mutex);
-  sb_reset_locked();sb_context=nullptr;sb_invoke=nullptr;
+  sb_reset_locked();ad_skip_available=ad_skip_requested=false;sb_context=nullptr;sb_invoke=nullptr;
   pthread_mutex_unlock(&sb_mutex);
   ytv_native_download_clear_video();
   SbLogRaw("YTV_MEDIA_SESSION_CALLBACK_DESTROYED\n");
