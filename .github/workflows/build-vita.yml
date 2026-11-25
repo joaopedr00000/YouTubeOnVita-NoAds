@@ -34,7 +34,7 @@ jobs:
               raise ValueError('Unsupported CRX version')
           with zipfile.ZipFile(io.BytesIO(raw[offset:])) as z:
               data = z.read('lib/libcobalt.so')
-              assert data[:6] == b'\x7fELF\x01\x01'
+              assert data[:6] == bytes.fromhex('7f454c460101')
               pathlib.Path('experiments/cobalt/evergreen/core25/lib/libcobalt.so').write_bytes(data)
           PY
           git clone --filter=blob:none --no-checkout https://github.com/youtube/cobalt.git experiments/cobalt/upstream-25
