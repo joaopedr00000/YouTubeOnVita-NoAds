@@ -1,0 +1,73 @@
+name: Experimental Cobalt 25 source build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/build-cobalt-experimental.yml']
+permissions:
+  contents: read
+concurrency:
+  group: cobalt-source-experimental
+  cancel-in-progress: true
+jobs:
+  cobalt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate preload fixtures
+        run: |
+          node tools/test_cobalt_adblock.cjs
+          python3 -m py_compile tools/prepare_cobalt_adblock.py
+      - name: Free runner disk for Cobalt toolchains
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h
+      - name: Fetch pinned Cobalt source and apply early preload
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch 25.lts.50 --single-branch https://github.com/youtube/cobalt.git cobalt-src
+          test "$(git -C cobalt-src rev-parse HEAD)" = 762d9bfda894dd22cc5d47200f9994c3027514eb
+          python3 tools/prepare_cobalt_adblock.py cobalt-src
+          git -C cobalt-src diff --check
+          git -C cobalt-src diff -- cobalt/browser/web_module.cc > "$RUNNER_TEMP/preload.patch"
+      - name: Build official ARM hard-float toolchain containers
+        working-directory: cobalt-src
+        run: |
+          set -euo pipefail
+          docker compose build base
+          docker compose build build-base
+          docker compose build build-raspi
+          df -h
+      - name: Compile modified Evergreen Starboard 15 runtime
+        working-directory: cobalt-src
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/code" -w /code -e PYTHONPATH=/code -e IS_CI=1 cobalt-build-raspi bash -lc '
+            set -euo pipefail
+            gn gen out/evergreen-arm-hardfp_noads --args="target_platform=\"evergreen-arm-hardfp\" target_cpu=\"arm\" target_os=\"linux\" build_with_separate_cobalt_toolchain=true use_asan=false sb_api_version=15 is_internal_build=false build_type=\"gold\""
+            ninja -C out/evergreen-arm-hardfp_noads -j 4 cobalt_install
+          '
+      - name: Inspect ELF ABI and preserve experimental binary
+        run: |
+          set -euo pipefail
+          mkdir -p cobalt-artifacts
+          runtime=$(find cobalt-src/out/evergreen-arm-hardfp_noads -type f -name libcobalt.so -print -quit)
+          test -n "$runtime"
+          readelf -h "$runtime" | tee cobalt-artifacts/elf-header.txt
+          grep -q 'ELF32' cobalt-artifacts/elf-header.txt
+          grep -q 'ARM' cobalt-artifacts/elf-header.txt
+          readelf -A "$runtime" > cobalt-artifacts/elf-attributes.txt
+          readelf -lW "$runtime" > cobalt-artifacts/elf-segments.txt
+          readelf --dyn-syms --wide "$runtime" > cobalt-artifacts/elf-symbols.txt
+          grep -q 'SbEventHandle' cobalt-artifacts/elf-symbols.txt
+          readelf -rW "$runtime" > cobalt-artifacts/elf-relocations.txt
+          cp "$runtime" cobalt-artifacts/libcobalt.so
+          cp "$RUNNER_TEMP/preload.patch" cobalt-artifacts/
+          (cd cobalt-artifacts && sha256sum libcobalt.so > SHA256SUMS)
+          printf '%s\n' 'EXPERIMENTAL: not Vita-loader compatible until fixed offsets, imports, cacheflush and boot path are ported and tested. Not a VPK.' > cobalt-artifacts/README.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: experimental-cobalt-arm-hardfp-sb15-NOT-VPK
+          path: cobalt-artifacts/
+          if-no-files-found: error
