@@ -15,6 +15,206 @@ extern "C" bool ytv_native_download_set_artwork(const char*,const char*);
 extern "C" bool ytv_native_download_artwork_valid(const char*);
 extern "C" void ytv_native_download_clear_video();
 
+
+/* SponsorBlock: read-only, bounded HTTPS lookup and MediaSession seek.
+ * Network runs off the Cobalt thread; no raw SbPlayerSeek or ad-stream manipulation.
+ */
+#include <curl/curl.h>
+#include <sodium.h>
+#include <pthread.h>
+#include <psp2/kernel/threadmgr.h>
+#include <string>
+#include <vector>
+#include <cmath>
+#include <cstdlib>
+#include <algorithm>
+
+extern "C" { int g_ytv_sponsorblock_mode = 0; }
+namespace {
+struct SbSegment { double start, end; bool attempted; };
+struct JsonToken { char type; size_t begin, end, next; };
+// Minimal bounded JSON reader; tokens retain exact subtree boundaries.
+struct SbJson {
+  const std::string& s;
+  size_t p=0;
+  std::vector<JsonToken> t;
+  void ws(){while(p<s.size() && isspace((unsigned char)s[p]))++p;}
+  bool value(unsigned depth=0){
+    ws();
+    if(depth>24 || p>=s.size() || t.size()>=16000)return false;
+    const char c=s[p]; const size_t i=t.size(), b=p++;
+    t.push_back({c,b,0,0});
+    if(c=='"' ){
+      bool closed=false;
+      while(p<s.size()){
+        char x=s[p++];
+        if(x=='"'){closed=true;break;}
+        if((unsigned char)x<32)return false;
+        if(x=='\\'){if(p==s.size())return false;++p;}
+      }
+      if(!closed)return false;
+    }else if(c=='{' || c=='['){
+      const char close=c=='{'?'}':']';
+      ws();
+      if(p<s.size() && s[p]==close)++p;
+      else for(;;){
+        ws();
+        if(c=='{'){
+          if(p>=s.size() || s[p]!='"' || !value(depth+1))return false;
+          ws(); if(p>=s.size() || s[p++]!=':')return false;
+        }
+        if(!value(depth+1))return false;
+        ws(); if(p>=s.size())return false;
+        char x=s[p++]; if(x==close)break; if(x!=',')return false;
+      }
+    }else{
+      while(p<s.size() && !isspace((unsigned char)s[p]) && s[p]!=',' && s[p]!=']' && s[p]!='}')++p;
+    }
+    t[i].end=p;t[i].next=t.size();return true;
+  }
+  bool equal(size_t i,const char* v)const{
+    return i<t.size() && t[i].type=='"' && t[i].end-t[i].begin==strlen(v)+2 &&
+           s.compare(t[i].begin+1,strlen(v),v)==0;
+  }
+  size_t field(size_t i,const char* k)const{
+    if(i>=t.size()||t[i].type!='{')return t.size();
+    for(size_t j=i+1;j<t[i].next;){
+      size_t v=t[j].next; if(v>=t[i].next)return t.size();
+      if(equal(j,k))return v;
+      j=t[v].next;
+    }
+    return t.size();
+  }
+  bool number(size_t i,double& out)const{
+    if(i>=t.size() || !(t[i].type=='-' || isdigit((unsigned char)t[i].type)))return false;
+    const std::string v=s.substr(t[i].begin,t[i].end-t[i].begin);
+    char* e=nullptr;out=strtod(v.c_str(),&e);
+    return e==v.c_str()+v.size() && std::isfinite(out);
+  }
+};
+size_t sb_write(char* ptr,size_t size,size_t count,void* user){
+  auto& s=*static_cast<std::string*>(user);
+  if(size && count>262144/size)return 0;
+  const size_t n=size*count;
+  if(n>262144-s.size())return 0;
+  s.append(ptr,n);return n;
+}
+std::vector<SbSegment> sb_lookup(const std::string& id,int mode){
+  unsigned char hash[crypto_hash_sha256_BYTES];
+  if(crypto_hash_sha256(hash,reinterpret_cast<const unsigned char*>(id.data()),id.size())!=0)return {};
+  char prefix[5];snprintf(prefix,sizeof(prefix),"%02x%02x",hash[0],hash[1]);
+  std::string url=std::string("https://sponsor.ajay.app/api/skipSegments/")+prefix+
+    "?categories=%5B%22sponsor%22";
+  if(mode==2)url+="%2C%22selfpromo%22%2C%22interaction%22%2C%22intro%22%2C%22outro%22";
+  url+="%5D&actionTypes=%5B%22skip%22%5D";
+  CURL* c=curl_easy_init();if(!c)return {};
+  std::string body;
+  curl_easy_setopt(c,CURLOPT_URL,url.c_str());
+  curl_easy_setopt(c,CURLOPT_CAINFO,"app0:cacert.pem");
+  curl_easy_setopt(c,CURLOPT_SSL_VERIFYPEER,1L);
+  curl_easy_setopt(c,CURLOPT_SSL_VERIFYHOST,2L);
+  curl_easy_setopt(c,CURLOPT_PROTOCOLS_STR,"https");
+  curl_easy_setopt(c,CURLOPT_FOLLOWLOCATION,0L);
+  curl_easy_setopt(c,CURLOPT_NOSIGNAL,1L);
+  curl_easy_setopt(c,CURLOPT_CONNECTTIMEOUT,4L);
+  curl_easy_setopt(c,CURLOPT_TIMEOUT,8L);
+  curl_easy_setopt(c,CURLOPT_USERAGENT,"YouTubeOnVita-NoAds/SponsorBlock");
+  curl_easy_setopt(c,CURLOPT_WRITEFUNCTION,sb_write);
+  curl_easy_setopt(c,CURLOPT_WRITEDATA,&body);
+  CURLcode result=curl_easy_perform(c);
+  long status=0;curl_easy_getinfo(c,CURLINFO_RESPONSE_CODE,&status);
+  curl_easy_cleanup(c);
+  if(result!=CURLE_OK || status!=200)return {};
+  SbJson j{body};if(!j.value())return {};
+  j.ws();if(j.p!=body.size() || j.t.empty() || j.t[0].type!='[')return {};
+  std::vector<SbSegment> segments;
+  for(size_t i=1;i<j.t[0].next;i=j.t[i].next){
+    if(!j.equal(j.field(i,"videoID"),id.c_str()))continue;
+    size_t a=j.field(i,"segments");
+    if(a>=j.t.size()||j.t[a].type!='[')continue;
+    for(size_t k=a+1;k<j.t[a].next && segments.size()<128;k=j.t[k].next){
+      const size_t cat=j.field(k,"category");
+      if(!j.equal(cat,"sponsor") && !(mode==2 &&
+         (j.equal(cat,"selfpromo")||j.equal(cat,"interaction")||j.equal(cat,"intro")||j.equal(cat,"outro"))))continue;
+      if(!j.equal(j.field(k,"actionType"),"skip"))continue;
+      size_t s=j.field(k,"segment"); double start,end;
+      if(s>=j.t.size() || j.t[s].type!='[' || j.t[s].next!=s+3 ||
+         !j.number(s+1,start)||!j.number(s+2,end)||start<0||end<=start||end>86400*7)continue;
+      segments.push_back({start,end,false});
+    }
+    break;
+  }
+  std::sort(segments.begin(),segments.end(),[](const SbSegment& a,const SbSegment& b){return a.start<b.start;});
+  return segments;
+}
+pthread_mutex_t sb_mutex=PTHREAD_MUTEX_INITIALIZER;
+std::string sb_id;
+uint64_t sb_generation=0,sb_at=0;
+double sb_pos=0,sb_duration=0,sb_rate=0;
+bool sb_playing=false,sb_worker_started=false;
+void* sb_context=nullptr;
+CobaltExtensionMediaSessionInvokeActionCallback sb_invoke=nullptr;
+void sb_reset_locked(){
+  sb_id.clear();++sb_generation;sb_playing=false;sb_at=0;
+}
+void* sb_worker(void*){
+  uint64_t loaded=~uint64_t(0);
+  int loaded_mode=-1;
+  std::vector<SbSegment> segs;
+  for(;;){
+    pthread_mutex_lock(&sb_mutex);
+    const int mode=__atomic_load_n(&g_ytv_sponsorblock_mode,__ATOMIC_RELAXED);
+    const uint64_t generation=sb_generation;
+    const std::string id=sb_id;
+    if(loaded!=generation || loaded_mode!=mode){
+      pthread_mutex_unlock(&sb_mutex);
+      segs=mode && !id.empty()?sb_lookup(id,mode):std::vector<SbSegment>{};
+      loaded=generation;loaded_mode=mode;
+      continue;
+    }
+    if(mode && sb_playing && sb_invoke && sb_at && !id.empty()){
+      const uint64_t now=sceKernelGetProcessTimeWide();
+      const double pos=sb_pos+(now-sb_at)*0.000001*sb_rate;
+      for(auto& s:segs){
+        if(s.attempted || pos<s.start || pos>=s.end-0.15 ||
+           s.end>sb_duration+0.05)continue;
+        CobaltExtensionMediaSessionActionDetails d;
+        CobaltExtensionMediaSessionActionDetailsInit(&d,kCobaltExtensionMediaSessionActionSeekto);
+        d.seek_time=std::min(s.end,sb_duration);
+        s.attempted=true;
+        sb_invoke(d,sb_context);
+        SbLogRaw("YTV_SPONSORBLOCK seek requested\n");
+        break;
+      }
+    }
+    pthread_mutex_unlock(&sb_mutex);
+    sceKernelDelayThread(mode?200000:500000);
+  }
+  return nullptr;
+}
+void sb_update(const char* id,const CobaltExtensionMediaSessionState& state){
+  pthread_mutex_lock(&sb_mutex);
+  if(!id || !*id){if(!sb_id.empty())sb_reset_locked();}
+  else{
+    if(sb_id!=id){sb_id=id;++sb_generation;}
+    sb_pos=state.current_playback_position/1000000.0;
+    sb_duration=state.duration/1000000.0;
+    sb_rate=state.actual_playback_rate;
+    sb_at=sceKernelGetProcessTimeWide();
+    sb_playing=state.actual_playback_state==kCobaltExtensionMediaSessionPlaying &&
+      state.has_position_state && state.available_actions[kCobaltExtensionMediaSessionActionSeekto] &&
+      sb_pos>=0 && sb_duration>0 && std::isfinite(sb_rate) && sb_rate>0 && sb_rate<=4;
+    if(!sb_worker_started){
+      pthread_t worker;
+      if(pthread_create(&worker,nullptr,sb_worker,nullptr)==0){
+        pthread_detach(worker);sb_worker_started=true;
+      }
+    }
+  }
+  pthread_mutex_unlock(&sb_mutex);
+}
+} // namespace
+
 namespace {
 bool video_from_artwork(const char* src,char output[12]){
   if(!src || strncmp(src,"https://",8)!=0)return false;
@@ -55,11 +255,13 @@ void on_update(CobaltExtensionMediaSessionState state){
   }
   if(state.actual_playback_state==kCobaltExtensionMediaSessionNone){
     ytv_native_download_clear_video();
+    sb_update(nullptr,state);
     return;
   }
-  if(!state.metadata)return;
+  if(!state.metadata){sb_update(nullptr,state);return;}
   if(!state.metadata->artwork || !state.metadata->artwork_count){
     ytv_native_download_clear_video();
+    sb_update(nullptr,state);
     return;
   }
   const size_t count=state.metadata->artwork_count>24?24:
@@ -80,8 +282,10 @@ void on_update(CobaltExtensionMediaSessionState state){
   }
   if(!active_id[0]){
     ytv_native_download_clear_video();
+    sb_update(nullptr,state);
     return;
   }
+  sb_update(active_id,state);
   if(ytv_native_download_set_video(active_id)){
     SbLogRaw("YTV_MEDIA_SESSION_VIDEO_ID_EXACT\n");
     // Cobalt's MediaSession artwork is the art supplied to the music player.
@@ -104,11 +308,17 @@ void on_update(CobaltExtensionMediaSessionState state){
     }
   }
 }
-void register_callbacks(void*,CobaltExtensionMediaSessionInvokeActionCallback,
+void register_callbacks(void* context,CobaltExtensionMediaSessionInvokeActionCallback invoke,
                         CobaltExtensionMediaSessionUpdatePlatformPlaybackStateCallback){
+  pthread_mutex_lock(&sb_mutex);
+  sb_reset_locked();sb_context=context;sb_invoke=invoke;
+  pthread_mutex_unlock(&sb_mutex);
   SbLogRaw("YTV_MEDIA_SESSION_CALLBACK_REGISTERED\n");
 }
 void destroy_callbacks(){
+  pthread_mutex_lock(&sb_mutex);
+  sb_reset_locked();sb_context=nullptr;sb_invoke=nullptr;
+  pthread_mutex_unlock(&sb_mutex);
   ytv_native_download_clear_video();
   SbLogRaw("YTV_MEDIA_SESSION_CALLBACK_DESTROYED\n");
 }
