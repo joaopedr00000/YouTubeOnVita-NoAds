@@ -1,0 +1,37 @@
+name: One-time update of v0.0.2 release credits
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/update-release-credits-v0.0.2-once.yml'
+permissions:
+  contents: write
+concurrency:
+  group: update-release-credits-v0.0.2
+  cancel-in-progress: false
+jobs:
+  update:
+    if: github.repository == 'joaopedr00000/YouTubeOnVita-NoAds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update release notes without modifying VPKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.2" --jq '.id')
+          test -n "$release_id"
+          test -s RELEASE_NOTES_v0.0.2.md
+          grep -Fq '[YouTubeOnVita by Wolff' RELEASE_NOTES_v0.0.2.md
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -f "body=$(cat RELEASE_NOTES_v0.0.2.md)" \
+            --jq '{id,tag_name,name,draft,prerelease,asset_count:(.assets|length)}'
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            --jq '.body' | grep -Fq '## Credits'
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            --jq '.body' | grep -Fq 'https://github.com/WolffsRoom/YouTubeOnVita'
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq '.assets|length')" -eq 3
+          echo "Updated v0.0.2 release credits; kept both VPKs and SHA256 sums unchanged." >> "$GITHUB_STEP_SUMMARY"

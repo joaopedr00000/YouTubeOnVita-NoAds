@@ -25,4 +25,12 @@ Requires kubridge 0.3.1+ and `ur0:data/libshacccg.suprx`. Install VPKs via VitaS
 
 Packages are intended to be built and verified with VitaSDK and the exact known Cobalt runtime (SHA-256 checks). **Hardware regression testing of v0.0.2 is still pending.** Some image distortions remain under investigation; the V8 memory translation fault is not conclusively resolved. This is a **prerelease** until tested on an actual PS Vita.
 
-Proudly made in 🇧🇷. Thanks to **Wolff's Room**, Cobalt, VitaSDK, vitaGL and the wider PS Vita homebrew community. This fork is unofficial and unaffiliated with YouTube, Google or Sony.
+Proudly made in 🇧🇷. This independent fork is unofficial and unaffiliated with YouTube, Google or Sony.
+
+## Credits
+
+**Original project:** [YouTubeOnVita by Wolff's Room](https://github.com/WolffsRoom/YouTubeOnVita).
+
+**Special thanks to Wolff's Room**, the original creator and main developer of YouTubeOnVita. The YouTube TV experience on PS Vita and the great majority of the app's existing features come from his work. This fork builds on that foundation, with SponsorBlock as its principal added user-facing feature.
+
+Additional thanks to the contributors behind Cobalt, VitaSDK, vitaGL and the wider PS Vita homebrew community.
