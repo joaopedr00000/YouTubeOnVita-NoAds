@@ -99,7 +99,7 @@ _Unofficial client for PS Vita_
 ### Install and update
 
 Install using **FMVita/VitaShell** or the [**Wolff's Store**](https://wolffsroom.github.io/WolffsRoomSite/).
-Both editions can be installed side by side, with separate LiveArea bubbles (**YTVNX0001** / **YTVNX0002**). To update, install the new VPK over the old one. Settings and account-session data are stored in `ux0:data/youtubevita/`. Do not delete this folder when updating.
+Both editions can be installed side by side, with separate LiveArea bubbles (**YTVNX0001** / **YTVNX0002**). To update, install the new VPK over the old one. **The current v0.0.1 release** stores settings and account-session data in `ux0:data/youtubevita/`. Do not delete that directory when updating. **The upcoming v0.0.2 fork (development only)** uses a separate directory, `ux0:data/youtubevita-noads/`, so it does not share sessions, settings, downloads, or logs with the original app. It will not automatically copy login tokens from the old directory: sign in again after installing a future v0.0.2 build. See [fork data isolation notes](docs/FORK_DATA_ISOLATION_V0_0_2.md).
 
 > [!TIP]
 > **Crash right after the startup animation?**
@@ -310,7 +310,7 @@ These measures help protect local data but do **not** make the client an officia
 - Certain video formats, DRM-protected content and Full HD streams may not work.
 - The YouTube service may change on uncertified devices.
 
-For crash reports, share reproduction steps and relevant `ux0:data/youtubevita/` logs, **not stored account or session data**.
+For crash reports, share reproduction steps and the applicable logs (`ux0:data/youtubevita/` for the published v0.0.1, or `ux0:data/youtubevita-noads/` for the future v0.0.2), **not stored account or session data**.
 
 ---
 

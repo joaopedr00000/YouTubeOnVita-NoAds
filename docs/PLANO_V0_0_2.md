@@ -10,13 +10,22 @@ Versão de referência: v0.0.1 já publicada, com build Full/Lite validada no Gi
 - [ ] **Preservar os Title IDs `YTVNX0001` e `YTVNX0002`** para atualização in-place e preservação das bolhas já instaladas. Não substituí-los por `YTVCB0001/0002`, que correspondem a outra modalidade de pacote.
 - [x] Preparado: nomes internos `YouTube-Full.vpk` e `YouTube-Lite.vpk` no modo personalizado; adaptados `CMakeLists.txt` e `.github/workflows/build-vita.yml`, preservando validação de hash do Cobalt. **A testar antes do release.**
 - [x] Preparado para **v0.0.2**: `YTV_COBALT_APP_VERSION=00.02` no workflow e como padrão do CMake, correspondente ao formato interno `NN.NN` do Vita SFO. Ainda falta validar o arquivo `param.sfo` na futura build. A v0.0.1 publicada permanece intacta.
-- [ ] Futuramente testar a instalação por cima da v0.0.1, preservando `ux0:data/youtubevita/` e evitando bolha duplicada.
+- [ ] Futuramente testar a instalação por cima da v0.0.1, **sem modificar** `ux0:data/youtubevita/`, criando `ux0:data/youtubevita-noads/` separadamente, sem migrar tokens automaticamente e evitando bolha duplicada.
 
 ## Identidade do fork para a v0.0.2
 
 - [x] Adicionar assinatura pública **Proudly made in 🇧🇷**, usando a bandeira, sem escrever o nome do país na assinatura.
 - [x] README passa a identificar este fork e preservar os créditos do port original.
 - [ ] Quando houver build, conferir a apresentação correta da assinatura nas páginas públicas e considerar uso de arte específica se for exibida dentro do Vita (o suporte a emoji da fonte não está confirmado).
+
+## P0 — Isolamento dos dados do fork (solicitado pelo autor original)
+
+- [x] Preparado na branch: diretório próprio `ux0:data/youtubevita-noads/` em Starboard, Cobalt, configurações, armazenamento de sessão, logs, cache, temporários, downloads e diagnósticos.
+- [x] Separar também as capturas em `ux0:picture/YouTubeVita-NoAds/`.
+- [x] Alterar o domínio de derivação da chave de criptografia das sessões para o fork, sem copiar automaticamente tokens do diretório antigo.
+- [x] Adicionar verificação estática `tools/test_fork_data_isolation.cjs` para a versão em desenvolvimento.
+- [ ] Confirmar em hardware que os dois aplicativos não compartilham dados. A primeira execução da v0.0.2 exigirá novo login e terá configurações padrão; os arquivos anteriores permanecerão intocados.
+- [ ] Antes da próxima release, revisar documentação dos caminhos de logs/testes e confirmar que Cobalt obtém os novos diretórios da plataforma.
 
 ## P0 — Investigar distorções visuais intermitentes
 
@@ -34,7 +43,7 @@ Versão de referência: v0.0.1 já publicada, com build Full/Lite validada no Gi
 
 - [ ] Diferenciar visualmente artefatos em vídeo (blocos, faixas, cores/quadros trocados) de artefatos na UI (triângulos, miniaturas deformadas e textos).
 - [ ] Comparar 480p e 720p, Bilinear e Nearest, Original/Zoom/Stretch, inclusive troca de vídeos/qualidade e reprodução prolongada.
-- [ ] Preservar e analisar os logs contemporâneos `ux0:data/youtubevita/starboard15.log` e `cobalt_boot.log`, e `*_prev.log` se aplicável. Correlacionar `YTV_LIFECYCLE_PLAYER_STATS`, `YTV_LIFECYCLE_PLAYER_SPS`, `YTV_LIFECYCLE_VIDEO_ASPECT_FRAME`, `YTV_LIFECYCLE_PLAYER_MEM`, `YTV_FPS` e uso de memória de VitaGL.
+- [ ] Preservar e analisar os logs contemporâneos `ux0:data/youtubevita-noads/starboard15.log` e `cobalt_boot.log`, e `*_prev.log` se aplicável. Correlacionar `YTV_LIFECYCLE_PLAYER_STATS`, `YTV_LIFECYCLE_PLAYER_SPS`, `YTV_LIFECYCLE_VIDEO_ASPECT_FRAME`, `YTV_LIFECYCLE_PLAYER_MEM`, `YTV_FPS` e uso de memória de VitaGL.
 - [ ] Somente depois de identificar o caminho de falha, implementar correção mínima e testes de alternância/resolução com validação no PS Vita.
 
 ## Critérios para v0.0.2

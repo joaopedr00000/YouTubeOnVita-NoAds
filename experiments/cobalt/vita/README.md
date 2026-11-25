@@ -11,6 +11,6 @@ docker run --rm -v "${PWD}:/src" -w /src -e VITASDK=/usr/local/vitasdk vitasdk/v
 ```
 
 Vita3K app title: `YTVSB0001`.
-Log in emulated guest `ux0:data/youtubevita/starboard15.log`.
+Log in emulated guest `ux0:data/youtubevita-noads/starboard15.log`.
 Do **not** represent this as Cobalt browser working, because it is a platform ABI/API test only.
 
