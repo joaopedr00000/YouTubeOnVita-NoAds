@@ -857,6 +857,7 @@ int main(void) {
                                         0x10000100,0x4000,0,0,NULL);
         if(hb>=0)sceKernelStartThread(hb,0,NULL);
       }
+      { extern void ytv_addons_load_adblock_config(void); ytv_addons_load_adblock_config(); }
       log_line("COBALT_EVENT_START_ENTER");
       int started=ytv_vita_lifecycle_begin(cobalt_event);
       log_line("COBALT_EVENT_START_RETURN");

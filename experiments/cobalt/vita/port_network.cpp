@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <strings.h>
+#include "ytv_adblock_dns.h"
 #include <climits>
 
 struct SbSocketPrivate {
@@ -367,23 +368,6 @@ bool SbSocketGetInterfaceAddress(const SbSocketAddress* destination,
 // Conservative host-only filter. Does NOT block in-player ads sent from
 // first-party youtube.com/googlevideo.com endpoints. Never block those hosts.
 extern "C" int g_ytv_adblock_enabled;
-static bool ytv_known_ad_host(const char* name) {
-  if (!name) return false;
-  const char* hosts[] = {
-      "googleads.g.doubleclick.net",
-      "pagead2.googlesyndication.com",
-      "www.googleadservices.com",
-      "adservice.google.com",
-      "adservice.google.com.br",
-      "static.doubleclick.net",
-      "pubads.g.doubleclick.net",
-  };
-  for (const char* h : hosts) {
-    if (!strcasecmp(name, h)) return true;
-  }
-  return false;
-}
-
 static SbSocketResolution* resolve_impl(const char* hostname,int filters) {
   if(!hostname || !*hostname || strlen(hostname)>253 ||
      ((filters&kSbSocketResolveFilterIpv6) &&
