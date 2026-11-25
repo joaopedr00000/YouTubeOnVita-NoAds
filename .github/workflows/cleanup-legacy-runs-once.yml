@@ -1,0 +1,68 @@
+name: One-time cleanup of legacy GitHub Actions runs
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cleanup-legacy-runs-once.yml'
+permissions:
+  actions: write
+  contents: read
+concurrency:
+  group: ytv-one-time-actions-history-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.repository == 'joaopedr00000/YouTubeOnVita-NoAds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Remove only completed legacy runs, preserve v0.0.1 and source-built runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'joaopedr00000/YouTubeOnVita-NoAds'
+          # 45655074168 marks the start of the successful v0.0.1 candidate builds.
+          # 45571393792 is the original verified Cobalt build: other workflows
+          # still retrieve its artifact by exact run ID, so it MUST be kept.
+          # GitHub Releases (v0.0.1 and attached VPKs) are untouched.
+          keep_from=45655074168
+          keep_source=45571393792
+          removed=0
+          failed=0
+          preserved=0
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100" \
+            --jq '.workflow_runs[] | [.id, .status, .name] | @tsv' > "$RUNNER_TEMP/runs.tsv"
+          total=$(wc -l < "$RUNNER_TEMP/runs.tsv")
+          echo "Found $total runs; preserving all IDs >= $keep_from and source run $keep_source."
+          while IFS=$'\t' read -r id status name; do
+            [[ "$id" =~ ^[0-9]+$ ]] || { echo "Malformed run ID: $id" >&2; exit 1; }
+            if (( id >= keep_from )) || (( id == keep_source )) || (( id == GITHUB_RUN_ID )); then
+              echo "KEEP $id $name ($status)"
+              preserved=$((preserved + 1))
+              continue
+            fi
+            if [[ "$status" != "completed" ]]; then
+              echo "KEEP ACTIVE $id $name ($status)"
+              preserved=$((preserved + 1))
+              continue
+            fi
+            if gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$id" >/dev/null; then
+              echo "DELETED $id $name"
+              removed=$((removed + 1))
+            else
+              echo "::error::Could not delete run $id"
+              failed=$((failed + 1))
+            fi
+          done < "$RUNNER_TEMP/runs.tsv"
+          {
+            echo "### One-time Actions history cleanup"
+            echo "- Legacy completed runs deleted: $removed"
+            echo "- Preserved/recent/active runs: $preserved"
+            echo "- Failed deletions: $failed"
+            echo "- Explicitly kept: v0.0.1 release/publishing runs, tested Full/Lite candidate, original Cobalt source run."
+            echo "- This cleanup does not touch GitHub Releases, tags, source code or VPK release assets."
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$failed" -eq 0
