@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['.github/workflows/build-cobalt-experimental.yml']
+    paths: ['.github/workflows/build-cobalt-experimental.yml', 'tools/cobalt_adblock_preload.js', 'tools/test_cobalt_adblock.cjs', 'tools/prepare_cobalt_adblock.py']
 permissions:
   contents: read
 concurrency:
@@ -45,8 +45,11 @@ jobs:
         working-directory: cobalt-src
         run: |
           set -euo pipefail
-          docker run --rm -v "$PWD:/code" -w /code -e PYTHONPATH=/code -e IS_CI=1 cobalt-build-evergreen bash -lc '
+          docker run --rm -v "$PWD:/code" -w /code -e PYTHONPATH=/code -e IS_CI=1 cobalt-build-evergreen bash -c '
             set -euo pipefail
+            # GN and legacy scripts expect an unversioned Python command.
+            command -v python >/dev/null || ln -s "$(command -v python3)" /usr/local/bin/python
+            python --version
             gn gen out/evergreen-arm-hardfp_noads --args="target_platform=\"evergreen-arm-hardfp\" target_cpu=\"arm\" target_os=\"linux\" build_with_separate_cobalt_toolchain=true use_asan=false sb_api_version=15 is_internal_build=false build_type=\"gold\""
             ninja -C out/evergreen-arm-hardfp_noads -j 4 cobalt_install
           '

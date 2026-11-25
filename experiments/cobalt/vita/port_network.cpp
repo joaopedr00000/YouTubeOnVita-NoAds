@@ -369,17 +369,17 @@ bool SbSocketGetInterfaceAddress(const SbSocketAddress* destination,
 extern "C" int g_ytv_adblock_enabled;
 static bool ytv_known_ad_host(const char* name) {
   if (!name) return false;
+  // Label-boundary suffix match; never block shared media/API hosts.
+  size_t len=strlen(name);
+  if(len && name[len-1]=='.') --len;
   const char* hosts[] = {
-      "googleads.g.doubleclick.net",
-      "pagead2.googlesyndication.com",
-      "www.googleadservices.com",
-      "adservice.google.com",
-      "adservice.google.com.br",
-      "static.doubleclick.net",
-      "pubads.g.doubleclick.net",
+      "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+      "adservice.google.com", "adservice.google.com.br",
   };
   for (const char* h : hosts) {
-    if (!strcasecmp(name, h)) return true;
+    const size_t n=strlen(h);
+    if(len>=n && !strncasecmp(name+len-n,h,n) &&
+       (len==n || name[len-n-1]=='.')) return true;
   }
   return false;
 }

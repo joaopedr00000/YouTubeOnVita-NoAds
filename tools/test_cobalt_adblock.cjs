@@ -24,4 +24,24 @@ assert.deepEqual(parse({someProperty:{adPlacements:[1]}}),{someProperty:{adPlace
 assert.deepEqual(parse(null), null);
 assert.equal(vm.runInContext('JSON.parse("{\\"adPlacements\\":[1]}", (k,v)=>v).adPlacements.length', context),1);
 assert.throws(()=>vm.runInContext('JSON.parse("{")', context), /JSON|property name|Unexpected/);
-console.log('Cobalt ad filter: all synthetic fixtures passed');
+const mixed = {responseContext:{}, adBreakParams:{x:1}, adSlots:[{}], streamingData:{adSlots:[1]}, contents:[
+  {adSlotRenderer:{},trackingParams:'x'},
+  {videoRenderer:{title:'Keep'},adSlotRenderer:{}},
+  {promotedSparklesTextSearchRenderer:{}}]};
+const cleaned=parse(mixed);
+assert.equal(cleaned.adBreakParams,undefined);
+assert.deepEqual(cleaned.streamingData,mixed.streamingData);
+assert.deepEqual(cleaned.contents,[{videoRenderer:{title:'Keep'}}]);
+assert.equal(vm.runInContext('ytInitialPlayerResponse={playabilityStatus:{status:"OK"},playerAds:[1]};ytInitialPlayerResponse.playerAds.length',context),0);
+const direct=vm.createContext({});
+vm.runInContext(`class FakeResponse { constructor(url) { this.url=url; } json() { return Promise.resolve({responseContext:{},adSlots:[1]}); } }
+this.Response=FakeResponse;
+class FakeXHR { get response(){return {responseContext:{},adSlots:[1]};} }
+this.XMLHttpRequest=FakeXHR;`,direct);
+vm.runInContext(source,direct);
+(async()=>{
+  assert.equal(await vm.runInContext('new Response("https://www.youtube.com/youtubei/v1/player").json().then(x=>x.adSlots.length)',direct),0);
+  assert.equal(await vm.runInContext('new Response("https://example.org/data").json().then(x=>x.adSlots.length)',direct),1);
+  assert.equal(vm.runInContext('var req=new XMLHttpRequest();req.responseType="json";req.responseURL="https://www.youtube.com/youtubei/v1/player";req.response.adSlots.length',direct),0);
+  console.log('Cobalt ad filter: all synthetic fixtures passed');
+})().catch(e=>{console.error(e);process.exitCode=1;});

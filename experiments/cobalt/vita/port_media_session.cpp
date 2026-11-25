@@ -146,7 +146,14 @@ std::vector<SbSegment> sb_lookup(const std::string& id,int mode){
     break;
   }
   std::sort(segments.begin(),segments.end(),[](const SbSegment& a,const SbSegment& b){return a.start<b.start;});
-  return segments;
+  // Merge overlapping segments so we never seek backwards or skip twice.
+  std::vector<SbSegment> merged;
+  for(const auto& s:segments){
+    if(!merged.empty() && s.start<=merged.back().end)
+      merged.back().end=std::max(merged.back().end,s.end);
+    else merged.push_back(s);
+  }
+  return merged;
 }
 pthread_mutex_t sb_mutex=PTHREAD_MUTEX_INITIALIZER;
 std::string sb_id;
@@ -272,7 +279,7 @@ void on_update(CobaltExtensionMediaSessionState state){
     sb_update(nullptr,state);
     return;
   }
-  if(!state.metadata){sb_update(nullptr,state);return;}
+  if(!state.metadata){ytv_native_download_clear_video();sb_update(nullptr,state);return;}
   if(!state.metadata->artwork || !state.metadata->artwork_count){
     ytv_native_download_clear_video();
     sb_update(nullptr,state);
@@ -292,7 +299,11 @@ void on_update(CobaltExtensionMediaSessionState state){
   // The artwork array may also contain a different "music cover" variant.
   char active_id[12]={};
   for(size_t i=0;i<count;i++){
-    if(video_from_artwork(state.metadata->artwork[i].src,active_id))break;
+    char candidate[12]={};
+    if(video_from_artwork(state.metadata->artwork[i].src,candidate)){
+      memcpy(active_id,candidate,sizeof(active_id));
+      break;
+    }
   }
   if(!active_id[0]){
     ytv_native_download_clear_video();

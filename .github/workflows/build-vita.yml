@@ -21,7 +21,7 @@ jobs:
         run: |
           node tools/test_cobalt_adblock.cjs
           python3 -m py_compile tools/prepare_cobalt_adblock.py
-      - name: Fetch verified Cobalt runtime and headers
+      - name: Fetch verified upstream Cobalt runtime and headers (partial filtering only)
         shell: bash
         run: |
           set -euo pipefail
@@ -73,8 +73,12 @@ jobs:
               cp "build-$variant/$filename" "dist/YouTube-NoAds-$variant.vpk"
             done
           '
+      - name: Report packaged runtime provenance
+        run: |
+          echo '## Full/Lite baseline — partial ad filtering only' >> "$GITHUB_STEP_SUMMARY"
+          echo 'These VPKs use the official unmodified Cobalt runtime. The JS preload is tested but NOT packaged or active. Native DNS and MediaSession features only; no guarantee of ad-free playback.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: YouTubeOnVita-NoAds-VPKs
+          name: YouTubeOnVita-NoAds-partial-filter-VPKs
           path: dist/*.vpk
           if-no-files-found: error
