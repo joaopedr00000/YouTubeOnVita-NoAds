@@ -86,11 +86,11 @@ struct RelocStats {
 static SceUInt64 g_boot_t0=0;
 static void log_line(const char *message) {
   if(!g_boot_t0)g_boot_t0=sceKernelGetProcessTimeWide();
-  sceIoMkdir("ux0:data/youtubevita",0777);
+  sceIoMkdir("ux0:data/youtubevita-noads",0777);
 #if defined(YTV_COBALT_BOOT_STAGE)
-  int f=sceIoOpen("ux0:data/youtubevita/cobalt_boot.log",
+  int f=sceIoOpen("ux0:data/youtubevita-noads/cobalt_boot.log",
 #else
-  int f=sceIoOpen("ux0:data/youtubevita/relocations.log",
+  int f=sceIoOpen("ux0:data/youtubevita-noads/relocations.log",
 #endif
                  SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND,0666);
   if(f>=0) {
@@ -398,8 +398,8 @@ int main(void) {
   // once as *_prev.log so a crash log survives the relaunch that follows it.
   {
     static const char* const kLogs[][2]={
-      {"ux0:data/youtubevita/cobalt_boot.log","ux0:data/youtubevita/cobalt_boot_prev.log"},
-      {"ux0:data/youtubevita/starboard15.log","ux0:data/youtubevita/starboard15_prev.log"},
+      {"ux0:data/youtubevita-noads/cobalt_boot.log","ux0:data/youtubevita-noads/cobalt_boot_prev.log"},
+      {"ux0:data/youtubevita-noads/starboard15.log","ux0:data/youtubevita-noads/starboard15_prev.log"},
     };
     for(unsigned i=0;i<sizeof(kLogs)/sizeof(kLogs[0]);++i){
       sceIoRemove(kLogs[i][1]);
@@ -566,7 +566,7 @@ int main(void) {
       // before mapping RX. Epilogue matches push-r4-lr/sub-sp-128 prologue.
       {
         unsigned target=0;
-        int diag_fd=sceIoOpen("ux0:data/youtubevita/ctor_cutoff.txt",SCE_O_RDONLY,0);
+        int diag_fd=sceIoOpen("ux0:data/youtubevita-noads/ctor_cutoff.txt",SCE_O_RDONLY,0);
         if(diag_fd>=0){
           char value[24]={0};
           int n=sceIoRead(diag_fd,value,sizeof(value)-1);
@@ -593,7 +593,7 @@ int main(void) {
 #if defined(YTV_COBALT_DIAG_EVENT_CUTOFF)
       {
         unsigned target=0;
-        int f=sceIoOpen("ux0:data/youtubevita/event_cutoff.txt",
+        int f=sceIoOpen("ux0:data/youtubevita-noads/event_cutoff.txt",
                        SCE_O_RDONLY,0);
         if(f>=0){
           char value[24]={0};
@@ -630,7 +630,7 @@ int main(void) {
       // start's nested configuration function in isolation.
       {
         unsigned target=0;
-        int f=sceIoOpen("ux0:data/youtubevita/inner_cutoff.txt",
+        int f=sceIoOpen("ux0:data/youtubevita-noads/inner_cutoff.txt",
                         SCE_O_RDONLY,0);
         if(f>=0){
           char value[24]={0};
@@ -663,7 +663,7 @@ int main(void) {
       // callback. Does not touch the official ELF file or normal relocation.
       {
         unsigned target=0;
-        int f=sceIoOpen("ux0:data/youtubevita/init_cutoff.txt",SCE_O_RDONLY,0);
+        int f=sceIoOpen("ux0:data/youtubevita-noads/init_cutoff.txt",SCE_O_RDONLY,0);
         if(f>=0){
           char value[24]={0};
           int n=sceIoRead(f,value,sizeof(value)-1);
@@ -713,7 +713,7 @@ int main(void) {
 #if defined(YTV_BROWSER_BUILD)
         want_relax=1;
 #else
-        { SceIoStat st; want_relax=sceIoGetstat("ux0:data/youtubevita/csp_optional.txt",&st)>=0; }
+        { SceIoStat st; want_relax=sceIoGetstat("ux0:data/youtubevita-noads/csp_optional.txt",&st)>=0; }
 #endif
         if(want_relax){
           uint32_t* c=(uint32_t*)(image+COBALT_CSP_REQUIRED_BRANCH);
@@ -734,7 +734,7 @@ int main(void) {
 #if defined(YTV_BROWSER_BUILD)
         ua_path="app0:browser/ua.css";
 #else
-        ua_path="ux0:data/youtubevita/ua.css";  // diagnostic
+        ua_path="ux0:data/youtubevita-noads/ua.css";  // diagnostic
 #endif
         SceUID ua_fd=sceIoOpen(ua_path,SCE_O_RDONLY,0);
         if(ua_fd>=0){
@@ -919,7 +919,7 @@ int main(void) {
       // (used by the automated Vita3K tests).
       unsigned limit_seconds=0;
       {
-        int f=sceIoOpen("ux0:data/youtubevita/pump_seconds.txt",SCE_O_RDONLY,0);
+        int f=sceIoOpen("ux0:data/youtubevita-noads/pump_seconds.txt",SCE_O_RDONLY,0);
         if(f>=0){
           char v[16]={0};
           int n=sceIoRead(f,v,sizeof(v)-1);

@@ -126,13 +126,13 @@ bool SbCPUFeaturesGet(SbCPUFeatures* out) {
   out->arm.architecture_generation=7;
   out->arm.part=0xC09;
   out->arm.has_neon=true;
-  // DIAGNOSTIC ONLY: the presence of ux0:data/youtubevita/diag_hide_neon.txt
+  // DIAGNOSTIC ONLY: the presence of ux0:data/youtubevita-noads/diag_hide_neon.txt
   // hides NEON from Cobalt (BoringSSL then uses its generic C crypto), to
   // test whether a TLS failure comes from emulator NEON behaviour. Real
   // hardware has NEON; the file must never exist in a normal setup.
   {
     SceIoStat st;
-    if(sceIoGetstat("ux0:data/youtubevita/diag_hide_neon.txt",&st)>=0){
+    if(sceIoGetstat("ux0:data/youtubevita-noads/diag_hide_neon.txt",&st)>=0){
       out->arm.has_neon=false;
       SbLogRaw("YTV_DIAG_CPU_FEATURES neon hidden (diagnostic file present)\n");
     }
@@ -190,7 +190,7 @@ extern "C" bool ytv_lowmem(){return &ytv_lowmem_build && ytv_lowmem_build;}
 
 namespace {
 // Optional overrides for performance experiments, read once from
-// ux0:data/youtubevita/cobalt_config.txt: "rasterizer=hardware",
+// ux0:data/youtubevita-noads/cobalt_config.txt: "rasterizer=hardware",
 // "jit=0", "swap_interval=0".
 struct Overrides { char rasterizer[24]; int jit; int swap_interval; int affinity; bool loaded; };
 // affinity defaults to 0 since v0.37: with MainWebModule alone on core 0 a
@@ -204,7 +204,7 @@ Overrides g_ovr = {"direct-gles", kDefaultJit, 1, 0, false};
 void load_overrides(){
   if(g_ovr.loaded)return;
   g_ovr.loaded=true;
-  int fd=sceIoOpen("ux0:data/youtubevita/cobalt_config.txt",SCE_O_RDONLY,0);
+  int fd=sceIoOpen("ux0:data/youtubevita-noads/cobalt_config.txt",SCE_O_RDONLY,0);
   if(fd<0)return;
   char buf[256]={0};
   int n=sceIoRead(fd,buf,sizeof(buf)-1);

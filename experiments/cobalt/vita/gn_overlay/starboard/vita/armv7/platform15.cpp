@@ -14,8 +14,8 @@
 #include <malloc.h>
 
 namespace {
-constexpr char kLogDir[] = "ux0:data/youtubevita";
-constexpr char kLogPath[] = "ux0:data/youtubevita/starboard15.log";
+constexpr char kLogDir[] = "ux0:data/youtubevita-noads";
+constexpr char kLogPath[] = "ux0:data/youtubevita-noads/starboard15.log";
 constexpr int64_t kEpoch1601To1970Us = 11644473600000000LL;
 }
 
@@ -68,11 +68,11 @@ bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_length) {
   const char* path = nullptr;
   switch (path_id) {
     case kSbSystemPathContentDirectory: path = "app0:"; break;
-    case kSbSystemPathCacheDirectory: path = "ux0:data/youtubevita/cache"; break;
+    case kSbSystemPathCacheDirectory: path = "ux0:data/youtubevita-noads/cache"; break;
     case kSbSystemPathDebugOutputDirectory: path = kLogDir; break;
-    case kSbSystemPathTempDirectory: path = "ux0:data/youtubevita/tmp"; break;
+    case kSbSystemPathTempDirectory: path = "ux0:data/youtubevita-noads/tmp"; break;
     case kSbSystemPathExecutableFile: path = "app0:eboot.bin"; break;
-    case kSbSystemPathStorageDirectory: path = "ux0:data/youtubevita/storage"; break;
+    case kSbSystemPathStorageDirectory: path = "ux0:data/youtubevita-noads/storage"; break;
     default: return false;
   }
   size_t n = strlen(path);

@@ -19,7 +19,7 @@ namespace {
 SbUserPrivate local_user={0x56544944u};
 SbStorageRecord current=nullptr;
 constexpr int64_t max_bytes=8*1024*1024;
-constexpr char dir[]="ux0:data/youtubevita/storage";
+constexpr char dir[]="ux0:data/youtubevita-noads/storage";
 bool name_path(const char* input,char* out,size_t n){
   const char* name=input?input:"default";
   size_t len=strlen(name);
@@ -94,7 +94,7 @@ SbStorageRecord SbStorageOpenRecord(SbUser user,const char* name){
   if(user!=&local_user || current)return nullptr;
   char path[256]={};
   if(!name_path(name,path,sizeof(path)))return nullptr;
-  sceIoMkdir("ux0:data/youtubevita",0777);
+  sceIoMkdir("ux0:data/youtubevita-noads",0777);
   sceIoMkdir(dir,0777);
   SbStorageRecord item=(SbStorageRecord)calloc(1,sizeof(SbStorageRecordPrivate));
   if(!item)return nullptr;

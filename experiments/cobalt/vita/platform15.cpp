@@ -17,17 +17,17 @@
 #include <stdio.h>
 
 namespace {
-constexpr char kLogDir[] = "ux0:data/youtubevita";
-constexpr char kLogPath[] = "ux0:data/youtubevita/starboard15.log";
+constexpr char kLogDir[] = "ux0:data/youtubevita-noads";
+constexpr char kLogPath[] = "ux0:data/youtubevita-noads/starboard15.log";
 constexpr int64_t kEpoch1601To1970Us = 11644473600000000LL;
 pthread_once_t g_log_dir_once=PTHREAD_ONCE_INIT;
 bool g_verbose=false;
 void create_log_dir_once(){
   sceIoMkdir(kLogDir,0777);
   // Diagnostic YTV_* lines cost an open/write/close on the memory card each;
-  // write them only when ux0:data/youtubevita/verbose.txt exists.
+  // write them only when ux0:data/youtubevita-noads/verbose.txt exists.
   SceIoStat st;
-  g_verbose=sceIoGetstat("ux0:data/youtubevita/verbose.txt",&st)>=0;
+  g_verbose=sceIoGetstat("ux0:data/youtubevita-noads/verbose.txt",&st)>=0;
 }
 bool always_logged(const char* m){
   return strncmp(m,"YTV_",4)!=0 || strncmp(m,"YTV_BREAK",9)==0 ||
@@ -292,11 +292,11 @@ bool SbSystemGetPath(SbSystemPathId path_id, char* out_path, int path_length) {
     case kSbSystemPathFontDirectory: path = "app0:/system_fonts"; break;
     case kSbSystemPathFontConfigurationDirectory:
       path = "app0:/system_fonts"; break;
-    case kSbSystemPathCacheDirectory: path = "ux0:data/youtubevita/cache"; break;
+    case kSbSystemPathCacheDirectory: path = "ux0:data/youtubevita-noads/cache"; break;
     case kSbSystemPathDebugOutputDirectory: path = kLogDir; break;
-    case kSbSystemPathTempDirectory: path = "ux0:data/youtubevita/tmp"; break;
+    case kSbSystemPathTempDirectory: path = "ux0:data/youtubevita-noads/tmp"; break;
     case kSbSystemPathExecutableFile: path = "app0:eboot.bin"; break;
-    case kSbSystemPathStorageDirectory: path = "ux0:data/youtubevita/storage"; break;
+    case kSbSystemPathStorageDirectory: path = "ux0:data/youtubevita-noads/storage"; break;
     default: return false;
   }
   size_t n = strlen(path);

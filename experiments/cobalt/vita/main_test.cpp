@@ -134,7 +134,7 @@ static void player_test_error(SbPlayer,void* c,SbPlayerError,const char*){
   static_cast<PlayerTest*>(c)->errors++;
 }
 int main() {
-  sceIoMkdir("ux0:data/youtubevita", 0777);
+  sceIoMkdir("ux0:data/youtubevita-noads", 0777);
   SbLogRaw("\nSTART Starboard 15 VitaSDK native API proof\n");
   check(sizeof(void*) == 4, "pointer ABI is 32 bit");
   check(sizeof(SbLogPriority) == 4, "SABI enum size is 4 bytes");
@@ -156,7 +156,7 @@ int main() {
   char path[128] = {};
   check(SbSystemGetPath(kSbSystemPathDebugOutputDirectory,path,sizeof(path)),
         "Starboard log path resolved");
-  check(strcmp(path,"ux0:data/youtubevita") == 0,
+  check(strcmp(path,"ux0:data/youtubevita-noads") == 0,
         "Starboard mapped Vita debug-output path");
   SbWindowOptions opts = {};
   SbWindowSetDefaultOptions(&opts);
@@ -188,8 +188,8 @@ int main() {
         "Starboard supplies its valid native window token to EGL");
   check(SbWindowDestroy(window), "Starboard fullscreen window destroyed");
   // Storage APIs use actual ux0: files; test read/write persistence across close.
-  const char* dirpath="ux0:data/youtubevita/sbfiletest";
-  const char* filepath="ux0:data/youtubevita/sbfiletest/sample.txt";
+  const char* dirpath="ux0:data/youtubevita-noads/sbfiletest";
+  const char* filepath="ux0:data/youtubevita-noads/sbfiletest/sample.txt";
   check(SbDirectoryCreate(dirpath),"Starboard Vita creates real filesystem directory");
   check(SbDirectoryCanOpen(dirpath),"Starboard directory opens by path");
   SbFileError io_error=kSbFileErrorFailed;
@@ -459,8 +459,8 @@ int main() {
         "Vita storage BLOB deleted from ux0");
   {
     // An app closed mid-save leaves .new/.backup files; saving must recover.
-    const char* leftovers[]={"ux0:data/youtubevita/storage/ytv_stale_test.dat.new",
-                             "ux0:data/youtubevita/storage/ytv_stale_test.dat.backup"};
+    const char* leftovers[]={"ux0:data/youtubevita-noads/storage/ytv_stale_test.dat.new",
+                             "ux0:data/youtubevita-noads/storage/ytv_stale_test.dat.backup"};
     for(const char* path:leftovers){
       int f=sceIoOpen(path,SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
       if(f>=0){sceIoWrite(f,"old",3);sceIoClose(f);}
