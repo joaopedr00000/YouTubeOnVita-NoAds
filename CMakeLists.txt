@@ -397,7 +397,7 @@ if(YTV_BUILD_COBALT_BOOT_PROBE)
   endif()
   target_compile_options(ytv_cobalt_boot PRIVATE -O2 -Wall -Wextra
     -mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard -fno-short-enums)
-  target_link_libraries(ytv_cobalt_boot PRIVATE starboard_vita15 kubridge_stub jpeg png webpdecoder avformat avcodec swresample avutil mp3lame ${YTV_CURL_LIB} ${YTV_CURL_TLS_LIBS} zstd
+  target_link_libraries(ytv_cobalt_boot PRIVATE starboard_vita15 kubridge_stub jpeg png webpdecoder avformat avcodec swresample avutil mp3lame mpg123 ${YTV_CURL_LIB} ${YTV_CURL_TLS_LIBS} zstd
     vitaGL vitashark SceShaccCgExt SceShaccCg_stub taihen_stub
     SceDisplay_stub SceGxm_stub SceAudio_stub SceKernelDmacMgr_stub
     ScePower_stub SceAppMgr_stub SceCtrl_stub SceTouch_stub
