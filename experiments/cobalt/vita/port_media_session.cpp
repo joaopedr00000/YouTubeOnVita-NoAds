@@ -6,6 +6,7 @@
  */
 #include "starboard/extension/media_session.h"
 #include "starboard/log.h"
+#include "starboard/event.h"
 #include <cstdio>
 #include <cstring>
 #include <cctype>
@@ -163,8 +164,70 @@ bool sb_playing=false,sb_worker_started=false;
 bool ad_skip_available=false,ad_skip_requested=false;
 void* sb_context=nullptr;
 CobaltExtensionMediaSessionInvokeActionCallback sb_invoke=nullptr;
+
+// MediaSession actions must be dispatched from Starboard's event-loop thread.
+// The network/timer worker only QUEUES them. It must never invoke Cobalt while
+// holding sb_mutex or from a detached pthread (reentrancy and lifetime risks).
+enum SbActionKind { kSbNoAction=0, kSbSkipAd=1, kSbSeekTo=2 };
+SbActionKind sb_action=kSbNoAction;
+double sb_action_seek=0.0;
+uint64_t sb_action_generation=0;
+SbEventId sb_action_event=0;
+
+void sb_clear_action_locked(){
+  if(sb_action_event)SbEventCancel(sb_action_event);
+  sb_action_event=0;sb_action=kSbNoAction;
+  sb_action_seek=0.0;sb_action_generation=0;
+}
+void sb_action_on_main(void*){
+  CobaltExtensionMediaSessionInvokeActionCallback invoke=nullptr;
+  void* context=nullptr;
+  CobaltExtensionMediaSessionActionDetails action;
+  SbActionKind kind=kSbNoAction;
+  pthread_mutex_lock(&sb_mutex);
+  kind=sb_action;
+  const bool valid=sb_action_generation==sb_generation && sb_invoke &&
+    ((kind==kSbSkipAd &&
+      __atomic_load_n(&g_ytv_adblock_enabled,__ATOMIC_RELAXED) &&
+      ad_skip_available) ||
+     (kind==kSbSeekTo &&
+      __atomic_load_n(&g_ytv_sponsorblock_mode,__ATOMIC_RELAXED)>0 &&
+      sb_playing && !ad_skip_available && sb_action_seek<=sb_duration));
+  if(valid){
+    invoke=sb_invoke;
+    context=sb_context;
+    CobaltExtensionMediaSessionActionDetailsInit(&action,
+      kind==kSbSkipAd?kCobaltExtensionMediaSessionActionSkipad:
+                      kCobaltExtensionMediaSessionActionSeekto);
+    if(kind==kSbSeekTo)action.seek_time=sb_action_seek;
+  }
+  // This callback is running: the event is already removed from the queue.
+  sb_action_event=0;sb_action=kSbNoAction;sb_action_seek=0.0;sb_action_generation=0;
+  pthread_mutex_unlock(&sb_mutex);
+
+  // Runs on the Vita main event loop, OUTSIDE sb_mutex. Callbacks may
+  // synchronously update MediaSession or unregister themselves.
+  if(invoke){
+    invoke(action,context);
+    SbLogRaw(kind==kSbSkipAd?"YTV_ADBLOCK skipad dispatched on main thread\n":
+                              "YTV_SPONSORBLOCK seek dispatched on main thread\n");
+  }
+}
+bool sb_schedule_action_locked(SbActionKind kind,double seek=0.0){
+  if(sb_action_event || !sb_invoke || kind==kSbNoAction)return false;
+  sb_action=kind;sb_action_seek=seek;sb_action_generation=sb_generation;
+  sb_action_event=SbEventSchedule(sb_action_on_main,nullptr,0);
+  if(!sb_action_event){
+    sb_action=kSbNoAction;sb_action_seek=0.0;sb_action_generation=0;
+    SbLogRaw("YTV_SPONSORBLOCK action_schedule_failed\n");
+    return false;
+  }
+  return true;
+}
 void sb_reset_locked(){
+  sb_clear_action_locked();
   sb_id.clear();++sb_generation;sb_playing=false;sb_at=0;
+  ad_skip_requested=false;
 }
 void* sb_worker(void*){
   uint64_t loaded=~uint64_t(0);
@@ -184,11 +247,10 @@ void* sb_worker(void*){
     // Only request the supported MediaSession action when the frontend exposes it.
     if(__atomic_load_n(&g_ytv_adblock_enabled,__ATOMIC_RELAXED) &&
        ad_skip_available && !ad_skip_requested && sb_invoke){
-      CobaltExtensionMediaSessionActionDetails d;
-      CobaltExtensionMediaSessionActionDetailsInit(&d,kCobaltExtensionMediaSessionActionSkipad);
-      ad_skip_requested=true;
-      sb_invoke(d,sb_context);
-      SbLogRaw("YTV_ADBLOCK skipad requested\n");
+      if(sb_schedule_action_locked(kSbSkipAd)){
+        ad_skip_requested=true;
+        SbLogRaw("YTV_ADBLOCK skipad scheduled\n");
+      }
     }
     if(mode && sb_playing && sb_invoke && sb_at && !id.empty() && !ad_skip_available){
       const uint64_t now=sceKernelGetSystemTimeWide();
@@ -196,12 +258,10 @@ void* sb_worker(void*){
       for(auto& s:segs){
         if(s.attempted || pos<s.start || pos>=s.end-0.15 ||
            s.end>sb_duration+0.05)continue;
-        CobaltExtensionMediaSessionActionDetails d;
-        CobaltExtensionMediaSessionActionDetailsInit(&d,kCobaltExtensionMediaSessionActionSeekto);
-        d.seek_time=std::min(s.end,sb_duration);
-        s.attempted=true;
-        sb_invoke(d,sb_context);
-        SbLogRaw("YTV_SPONSORBLOCK seek requested\n");
+        if(sb_schedule_action_locked(kSbSeekTo,std::min(s.end,sb_duration))){
+          s.attempted=true;
+          SbLogRaw("YTV_SPONSORBLOCK seek scheduled\n");
+        }
         break;
       }
     }
@@ -217,7 +277,10 @@ void sb_update(const char* id,const CobaltExtensionMediaSessionState& state){
   if(!ad_skip_available)ad_skip_requested=false;
   if(!id || !*id){if(!sb_id.empty())sb_reset_locked();}
   else{
-    if(sb_id!=id){sb_id=id;++sb_generation;}
+    if(sb_id!=id){
+      sb_clear_action_locked();ad_skip_requested=false;
+      sb_id=id;++sb_generation;
+    }
     sb_pos=state.current_playback_position/1000000.0;
     sb_duration=state.duration/1000000.0;
     sb_rate=state.actual_playback_rate;
