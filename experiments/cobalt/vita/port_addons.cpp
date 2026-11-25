@@ -70,6 +70,7 @@ extern "C" volatile size_t g_vgl_free_vram, g_vgl_free_ram, g_vgl_free_phy;  // 
 extern volatile unsigned g_ytv_hud_dropped_total;  // port_player.cpp
 // Read atomically in the Starboard DNS worker threads.
 extern "C" { int g_ytv_adblock_enabled = 0; }
+extern "C" int g_ytv_sponsorblock_mode;
 // Video decoder texture sampler only. 1=legacy bilinear, 0=nearest/clearer.
 extern "C" { volatile int g_ytv_video_bilinear_enabled = 1; }
 extern "C" { volatile int g_ytv_video_aspect_mode = 0; }
@@ -453,7 +454,7 @@ int page_count() {
   if (g_page == kPagePlayer) return 9;
   if (g_page == kPageDownload) return 5;
   if (g_page == kPageDownloads) return download_visible()+2;
-  if (g_page == kPageSettings) return 8;
+  if (g_page == kPageSettings) return 9;
   if (g_page == kPageDisplay) return 6;
   return 6;
 }
@@ -533,6 +534,7 @@ const char* item_text(int i) {
       T("Lock input", "Bloquear entrada"),
       T("Language", "Idioma"),
       T("Inverted screen", "Tela invertida"),
+      T("SponsorBlock", "SponsorBlock"),
       T("Back", "Voltar"),
     };
     return labels[i];
@@ -591,6 +593,7 @@ void icon_item(const Canvas& c, int i, float x, float y, uint32_t col, uint32_t 
       case 3: icon_lr(c,x,y,col,bg); break;
       case 5: icon_timer(c,x,y,col); break;
       case 6: icon_screen_off(c,x,y,col,bg); break;
+      case 7: icon_timer(c,x,y,col); break;
       default: icon_close(c,x,y,col); break;
     }
   } else if (g_page == kPageDisplay) {
@@ -668,6 +671,7 @@ const char* item_value(int i, const char* timer, char* scratch, size_t capacity)
       case 3: return g_lr_enabled ? T("On","Ligados") : T("Off","Desligados");
       case 5: return g_language_pref == 0 ? T("System","Sistema") : (g_language_pref == 1 ? "PT-BR" : "English");
       case 6: return __atomic_load_n(&g_ytv_screen_flip,__ATOMIC_RELAXED) ? T("On","Ligada") : T("Off","Desligada");
+      case 7: { const int mode=__atomic_load_n(&g_ytv_sponsorblock_mode,__ATOMIC_RELAXED); return mode==2 ? T("Extended","Ampliado") : mode==1 ? T("Sponsors","Patrocinios") : T("Off","Desligado"); }
     }
   }
   if (g_page == kPageDisplay) {
@@ -1096,9 +1100,9 @@ void save_cfg() {
   sceIoMkdir("ux0:data/youtubevita",0777);
   SceUID fd=sceIoOpen(kAddonCfg,SCE_O_WRONLY|SCE_O_CREAT|SCE_O_TRUNC,0666);
   if (fd<0) return;
-  char buf[320];
+  char buf[384];
   const int n=snprintf(buf,sizeof(buf),
-      "lr=%d\nadblock=%d\nquality=%s\naudio_only=%d\nlanguage=%d\nfhd=%d\ndim=%d\nperf=%d\nclock=%d\nui_sound=%d\nui_volume=%d\nvideo_filter=%s\nvideo_aspect=%d\nmedia_volume=%d\nvideo_vertical=%d\nscreen_flip=%d\n",
+      "lr=%d\nadblock=%d\nquality=%s\naudio_only=%d\nlanguage=%d\nfhd=%d\ndim=%d\nperf=%d\nclock=%d\nui_sound=%d\nui_volume=%d\nvideo_filter=%s\nvideo_aspect=%d\nmedia_volume=%d\nvideo_vertical=%d\nscreen_flip=%d\nsponsorblock=%d\n",
       g_lr_enabled?1:0,__atomic_load_n(&g_ytv_adblock_enabled,__ATOMIC_RELAXED),
       kQualityValues[g_quality_idx],g_audio_only?1:0,g_language_pref,
       g_fhd_cfg?1:0,g_dim_idx,g_perf_hud?1:0,g_clock_hud?1:0,g_ui_sound?1:0,g_ui_volume,
@@ -1106,18 +1110,22 @@ void save_cfg() {
        __atomic_load_n(&g_ytv_video_aspect_mode,__ATOMIC_RELAXED),
        __atomic_load_n(&g_ytv_media_volume_pct,__ATOMIC_RELAXED),
        __atomic_load_n(&g_ytv_video_vertical_mode,__ATOMIC_RELAXED),
-       __atomic_load_n(&g_ytv_screen_flip,__ATOMIC_RELAXED));
+       __atomic_load_n(&g_ytv_screen_flip,__ATOMIC_RELAXED),
+       __atomic_load_n(&g_ytv_sponsorblock_mode,__ATOMIC_RELAXED));
   if (n>0 && n<(int)sizeof(buf)) sceIoWrite(fd,buf,n);
   sceIoClose(fd);
 }
 void load_cfg() {
   SceUID fd=sceIoOpen(kAddonCfg,SCE_O_RDONLY,0);
   if (fd<0) return;
-  char buf[320]={};
+  char buf[384]={};
   const int n=sceIoRead(fd,buf,sizeof(buf)-1);
   sceIoClose(fd);
   if (n<=0) return;
   if (strstr(buf,"lr=0")) g_lr_enabled=false;
+  if (const char* v=strstr(buf,"sponsorblock=")) {
+    const int mode=atoi(v+13); if(mode>=0 && mode<=2)__atomic_store_n(&g_ytv_sponsorblock_mode,mode,__ATOMIC_RELAXED);
+  }
   if (strstr(buf,"adblock=1"))
     __atomic_store_n(&g_ytv_adblock_enabled,1,__ATOMIC_RELAXED);
   if (strstr(buf,"quality=360")) g_quality_idx=0;
@@ -1200,6 +1208,7 @@ void adjust_item(int delta) {
                      "YTV_LIFECYCLE_VIDEO_FILTER mode=nearest apply=next_video\n");
   } else if (g_page==kPageSettings) {
     switch(g_sel) {
+      case 7: { const int mode=(__atomic_load_n(&g_ytv_sponsorblock_mode,__ATOMIC_RELAXED)+3+delta)%3; __atomic_store_n(&g_ytv_sponsorblock_mode,mode,__ATOMIC_RELAXED); save_cfg(); break; }
       case 0: toggle_adblock(); break;
       case 1: g_quality_idx=(g_quality_idx+3+delta)%3;save_cfg();break;
       case 2: g_audio_only=!g_audio_only;save_cfg();break;
@@ -1373,7 +1382,7 @@ void activate(int item) {
     } else if(item==n+1)menu_back();
   } else if (g_page==kPageSettings) {
     switch(item) {
-      case 0: case 1: case 2: case 3: case 5: case 6: adjust_item(1);break;
+      case 0: case 1: case 2: case 3: case 5: case 6: case 7: adjust_item(1);break;
       case 4: open_menu(false);g_input_locked=true;
               ytv_ui_sound(12);  // controls lock
               log_line("YTV_LIFECYCLE_ADDON input_locked=1\n");
@@ -1515,7 +1524,7 @@ bool ytv_addons_input(uint32_t previous, uint32_t current) {
     }
     if ((g_page==kPagePlayer && (g_sel==2 || g_sel==4 || g_sel==5 || g_sel==6 || g_sel==7)) ||
         (g_page==kPageSettings && (g_sel==0 || g_sel==1 ||
-                                  g_sel==2 || g_sel==3 || g_sel==5 || g_sel==6)) ||
+                                  g_sel==2 || g_sel==3 || g_sel==5 || g_sel==6 || g_sel==7)) ||
         (g_page==kPageDisplay && g_sel<=4))
       {adjust_item(delta);ytv_ui_sound(1);}
   }
@@ -1602,7 +1611,7 @@ void ytv_addons_tap(float x, float y) {
       } else if (g_page==kPagePlayer && i==2 && px<kPanelW/3)
         adjust_item(-1);
       else if (g_page==kPageSettings &&
-               (i==0 || i==1 || i==2 || i==3 || i==5 || i==6) &&
+               (i==0 || i==1 || i==2 || i==3 || i==5 || i==6 || i==7) &&
                px<kPanelW/3)
         adjust_item(-1);
       else if (g_page==kPagePlayer && (i==4 || i==5 || i==6 || i==7) && px<kPanelW/3)
