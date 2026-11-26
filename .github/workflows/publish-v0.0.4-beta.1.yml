@@ -1,0 +1,153 @@
+name: Publish v0.0.4-beta.1 — verified Serial GC Full and Lite (public BETA)
+
+on:
+  push:
+    branches: ['experiments/v8-serial-gc']
+    paths: ['.github/workflows/publish-v0.0.4-beta.1.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: release-v0.0.4-beta.1
+  cancel-in-progress: false
+
+jobs:
+  stage-tested-serialgc-cobalt:
+    if: github.repository == 'joaopedr00000/YouTubeOnVita-NoAds' && github.ref == 'refs/heads/experiments/v8-serial-gc'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Regression tests and beta release-note claims
+        run: |
+          set -euo pipefail
+          node tools/test_cobalt_adblock.cjs
+          node tools/test_vm_data_mappings.cjs
+          node tools/test_sponsorblock_threading.cjs
+          node tools/test_fork_data_isolation.cjs
+          node tools/test_modifications_menu.cjs
+          python3 tools/experiments/test_v8_serial_gc_patch.py
+          test -s RELEASE_NOTES_v0.0.4-beta.1.md
+          grep -q '15 minutes' RELEASE_NOTES_v0.0.4-beta.1.md
+          grep -q 'NO crash observed' RELEASE_NOTES_v0.0.4-beta.1.md
+          grep -q 'cannot yet confirm' RELEASE_NOTES_v0.0.4-beta.1.md
+          grep -q 'Wolff' RELEASE_NOTES_v0.0.4-beta.1.md
+      - name: Download exactly the Cobalt from the successful physical Vita experiment
+        uses: actions/download-artifact@v4
+        with:
+          name: cobalt-vita-candidate-input
+          run-id: 45739012621
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+          path: candidate
+      - name: Verify exact Serial GC Cobalt and loader profile from the hardware-tested experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd candidate && sha256sum -c SHA256SUMS)
+          printf '%s\n' '7fac748639488da0873280dd2a6d549612798034a46a6ec20e440fefb24a2ab4  candidate/libcobalt.so' | sha256sum -c -
+          grep -Fq 'CANDIDATE_SHA256 "7fac748639488da0873280dd2a6d549612798034a46a6ec20e440fefb24a2ab4"' candidate/cobalt_candidate_profile.h
+          grep -aq -- '--single-threaded-gc' candidate/libcobalt.so
+          grep -aq 'ytv-adblock-preload.js' candidate/libcobalt.so
+          test -d candidate/content
+      - name: Stage same verified Cobalt for Full/Lite beta packaging
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobalt-vita-candidate-input
+          path: candidate/
+          if-no-files-found: error
+
+  compile-beta-vpks:
+    needs: stage-tested-serialgc-cobalt
+    uses: ./.github/workflows/build-vita.yml
+    with:
+      custom_cobalt: true
+      app_version: '00.04'
+
+  verify-and-publish-beta:
+    needs: [stage-tested-serialgc-cobalt, compile-beta-vpks]
+    if: github.repository == 'joaopedr00000/YouTubeOnVita-NoAds' && github.ref == 'refs/heads/experiments/v8-serial-gc'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download newly compiled Full/Lite beta VPKs
+        uses: actions/download-artifact@v4
+        with:
+          name: YouTubeOnVita-experimental-cobalt-VPKs
+          path: release-assets
+      - name: Verify version 00.04, exact Serial GC Cobalt, fork IDs and file integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib,zipfile,hashlib,struct
+          runtime='7fac748639488da0873280dd2a6d549612798034a46a6ec20e440fefb24a2ab4'
+          def parse_sfo(data):
+              magic,ver,keytable,valtable,n=struct.unpack_from('<4sIIII',data)
+              assert magic==b'\x00PSF',magic
+              values={}
+              for i in range(n):
+                  keyoff,align,kind,size,maxsize,dataoff=struct.unpack_from('<HBBIII',data,20+16*i)
+                  key=data[keytable+keyoff:].split(b'\x00',1)[0].decode('ascii')
+                  values[key]=data[valtable+dataoff:valtable+dataoff+size].rstrip(b'\x00').decode('utf8','replace')
+              return values
+          for variant,title,tid in [('Full','YouTube','YTVNX0001'),('Lite','YouTube Lite','YTVNX0002')]:
+              p=pathlib.Path('release-assets')/f'YouTube-{variant}.vpk'
+              assert p.is_file() and p.stat().st_size>1000000,p
+              with zipfile.ZipFile(p) as z:
+                  assert z.testzip() is None,variant
+                  so=z.read('libcobalt.so')
+                  assert hashlib.sha256(so).hexdigest()==runtime,variant
+                  assert b'--single-threaded-gc' in so,variant
+                  assert len(z.read('eboot.bin'))>100000,variant
+                  d=parse_sfo(z.read('sce_sys/param.sfo'))
+                  assert d.get('TITLE_ID')==tid,d
+                  assert d.get('APP_VER')=='00.04',d
+                  assert d.get('TITLE')==title,d
+                  assert 'Candidate' not in str(d),d
+                  print(variant,tid,d['APP_VER'],'Cobalt verified')
+              p.rename(pathlib.Path('release-assets')/f'YouTube-{variant}-v0.0.4-beta.1.vpk')
+          PY
+          (cd release-assets && sha256sum YouTube-*-v0.0.4-beta.1.vpk > SHA256SUMS.txt)
+          cat release-assets/SHA256SUMS.txt
+      - name: Publish public beta as a GitHub prerelease — never overwrite an existing tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.4-beta.1" >/dev/null 2>&1; then
+            echo 'Beta tag already published; refusing replacement' >&2
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v0.0.4-beta.1" >/dev/null 2>&1; then
+            echo 'Tag already exists; refusing replacement' >&2
+            exit 1
+          fi
+          gh release create v0.0.4-beta.1 \
+            release-assets/YouTube-Full-v0.0.4-beta.1.vpk \
+            release-assets/YouTube-Lite-v0.0.4-beta.1.vpk \
+            release-assets/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'YouTubeOnVita-NoAds v0.0.4-beta.1 — V8 Serial GC (BETA) 🇧🇷' \
+            --notes-file RELEASE_NOTES_v0.0.4-beta.1.md \
+            --prerelease
+      - name: Check public prerelease flag, all three assets and credits
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.4-beta.1" --jq '{tag_name,name,prerelease,assets:[.assets[].name]}'
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.4-beta.1" --jq '.prerelease')" = true
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.4-beta.1" --jq '.draft')" = false
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.4-beta.1" --jq '.assets|length')" -eq 3
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.4-beta.1" --jq '.body' | grep -Fq 'Wolff'
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.0.4-beta.1" --jq '.body' | grep -Fq 'cannot yet confirm'
+          echo '## Published beta: v0.0.4-beta.1' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Public prerelease; 15-minute hardware test showed no crash, but the fix is unconfirmed.' >> "$GITHUB_STEP_SUMMARY"
