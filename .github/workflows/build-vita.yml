@@ -6,6 +6,9 @@ on:
       custom_cobalt:
         type: boolean
         default: false
+      app_version:
+        type: string
+        default: '00.03'
   push:
     branches: [main]
     paths: ['CMakeLists.txt', 'experiments/**', 'tools/**', '.github/workflows/build-vita.yml']
@@ -83,8 +86,9 @@ jobs:
         shell: bash
         env:
           CUSTOM_COBALT: ${{ inputs.custom_cobalt == true && '1' || '0' }}
+          APP_VERSION: ${{ inputs.app_version || '00.03' }}
         run: |
-          docker run --rm -e CUSTOM_COBALT -v "$PWD:/src" -w /src -e VITASDK=/usr/local/vitasdk vitasdk/vitasdk:latest bash -lc '
+          docker run --rm -e CUSTOM_COBALT -e APP_VERSION -v "$PWD:/src" -w /src -e VITASDK=/usr/local/vitasdk vitasdk/vitasdk:latest bash -lc '
             set -euo pipefail
             export PATH="$VITASDK/bin:$PATH"
             # Match the header to the vendored no-splash VitaGL static library.
@@ -101,7 +105,7 @@ jobs:
                 filename=YouTube-Full.vpk
                 if [ "$variant" = Lite ]; then filename=YouTube-Lite.vpk; fi
               fi
-              cmake -S . -B "build-$variant" "${extra[@]}" -DCMAKE_BUILD_TYPE=Release -DYTV_NATIVE_HARDENED_CURL=ON -DYTV_PACKAGE_LITE="$lite" -DYTV_COBALT_APP_VERSION=00.03 -DYTV_NATIVE_DOWNLOAD_TEST=OFF -DYTV_V061_RX_CHUNKS=ON -DYTV_V061_THREE_CORES=OFF
+              cmake -S . -B "build-$variant" "${extra[@]}" -DCMAKE_BUILD_TYPE=Release -DYTV_NATIVE_HARDENED_CURL=ON -DYTV_PACKAGE_LITE="$lite" -DYTV_COBALT_APP_VERSION="$APP_VERSION" -DYTV_NATIVE_DOWNLOAD_TEST=OFF -DYTV_V061_RX_CHUNKS=ON -DYTV_V061_THREE_CORES=OFF
               cmake --build "build-$variant" --target "$filename-vpk" -j4
               if [ "$CUSTOM_COBALT" = 1 ]; then
                 cp "build-$variant/$filename" "dist/YouTube-$variant.vpk"
