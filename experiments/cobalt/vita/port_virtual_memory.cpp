@@ -66,7 +66,7 @@ void vm_log(const char* fmt,...){
   // Failures (YTV_LIFECYCLE_VM_*) have their own budget: the 400-line cap
   // used to be exhausted by routine map/unmap lines, hiding later failures.
   if(strstr(fmt,"YTV_VM_TRACE")){
-    if(__sync_add_and_fetch(&g_vm_trace_lines,1)>1800)return;
+    if(__sync_add_and_fetch(&g_vm_trace_lines,1)>320)return;
   } else if(strstr(fmt,"LIFECYCLE")){
     if(__sync_add_and_fetch(&g_vm_fail_lines,1)>200)return;
   } else if(__sync_add_and_fetch(&g_vm_log_lines,1)>400)return;
@@ -179,13 +179,17 @@ bool SbMemoryUnmap(void* address,int64_t size_bytes) {
   const uintptr_t map_base=(uintptr_t)m.base;
   const uint64_t map_size=m.aligned;
   uint32_t repeated_releases=0;
+  uint32_t released_after=0;
   uint32_t total_pages=(uint32_t)(m.aligned/kPageSize);
   uint32_t first=(uint32_t)((begin-(uintptr_t)m.base)/kPageSize);
   uint32_t count=(uint32_t)(rounded/kPageSize);
   int result=0;
   if(first==0 && count==total_pages && m.released_pages==0) {
     result=sceKernelFreeMemBlock(m.memid);  // whole mapping at once
-    if(result>=0){free(m.released);free(m.kernel_pages);m={};}
+    if(result>=0){
+      released_after=total_pages;  // Capture count before resetting mapping.
+      free(m.released);free(m.kernel_pages);m={};
+    }
   } else {
     if(!m.released) {
       m.released=(uint8_t*)calloc((total_pages+7)/8,1);
@@ -208,13 +212,13 @@ bool SbMemoryUnmap(void* address,int64_t size_bytes) {
           ++repeated_releases;
         }
       }
+      released_after=m.released_pages;
       if(m.released_pages==total_pages) {
         result=sceKernelFreeMemBlock(m.memid);
         if(result>=0){free(m.released);free(m.kernel_pages);m={};}
       }
     }
   }
-  const uint32_t released_after=m.released_pages;
   pthread_mutex_unlock(&lock);
   vm_log("YTV_VM_UNMAP %p size=%lld pages=%u+%u/%u result=0x%x\n",address,
          (long long)size_bytes,first,count,total_pages,(unsigned)result);
@@ -243,6 +247,8 @@ bool SbMemoryProtect(void* address,int64_t size_bytes,int flags) {
   SceUID memid=0;
   uintptr_t map_base=0;
   uint32_t kernel_pages=0;
+  uint64_t map_size=0;
+  uint32_t released_before=0;
   for(int i=0;i<kMaxMaps;i++) {
     Mapping& m=maps[i];
     if(!m.base)continue;
@@ -252,6 +258,8 @@ bool SbMemoryProtect(void* address,int64_t size_bytes,int flags) {
       map_id=m.map_id;
       memid=m.memid;
       map_base=b;
+      map_size=m.aligned;
+      released_before=m.released_pages;
       const uint32_t first=(uint32_t)((begin-b)/kPageSize);
       const uint32_t count=(uint32_t)(rounded/kPageSize);
       const uint32_t total_pages=(uint32_t)(m.aligned/kPageSize);
@@ -308,10 +316,13 @@ bool SbMemoryProtect(void* address,int64_t size_bytes,int flags) {
     vm_log("YTV_LIFECYCLE_VM_PROTECT_FAIL %p size=%lld flags=%d within=%d released=%d err=0x%x\n",
            address,(long long)size_bytes,flags,within?1:0,
            released_overlap?1:0,(unsigned)result);
-  if(kernel_calls)
-    vm_log("YTV_VM_TRACE_PROTECT id=%u uid=0x%x block=%p range=%p+%u flags=%d calls=%u touched_pages=%u result=0x%x\n",
+  // Capture ALL protection requests to the recurring 508 KiB musl/V8
+  // allocation, including ordinary RW requests that never call the kernel.
+  // Other mappings only log when kernel protection is actually attempted.
+  if(kernel_calls || (map_size==0x7f000u && within))
+    vm_log("YTV_VM_TRACE_PROTECT id=%u uid=0x%x block=%p range=%p+%u flags=%d calls=%u touched_pages=%u released_pages=%u result=0x%x\n",
            map_id,(unsigned)memid,(void*)map_base,address,(unsigned)rounded,
-           flags,kernel_calls,kernel_pages,(unsigned)result);
+           flags,kernel_calls,kernel_pages,released_before,(unsigned)result);
   return within && result>=0;
 }
 } // extern C
