@@ -1,6 +1,6 @@
 # VM / V8 tentative crash mitigation: per-page kernel protection
 
-Status: **development candidate only; no Vita hardware verification of this exact change.**
+**Retest result (2026-11-25): FAILED on physical PS Vita.** The exact page-granular-protection build crashed again after switching videos, with the same Cobalt PC offset `+0x95a194` and `DFSR=7`. The patch is **not an effective confirmed fix**. See [latest hardware retest](V004_VM_PAGE_FIX_RETEST_FAILURE_2026-11-25.md).
 
 The three user-provided PS Vita dumps all stop in the same Cobalt instruction
 at offset **+0x95a194**, an ARM \`ldr r2, [r0, #-1]\` from tagged-looking
