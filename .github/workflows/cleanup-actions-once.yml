@@ -1,0 +1,56 @@
+name: One-time safe cleanup of obsolete GitHub Actions runs
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cleanup-actions-once.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+jobs:
+  prune-obsolete-runs:
+    if: github.repository == 'joaopedr00000/YouTubeOnVita-NoAds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Delete only explicitly identified redundant completed run IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'joaopedr00000/YouTubeOnVita-NoAds'
+          # KEEP: experimental Cobalt inputs, v0.0.1/2/3 release provenance,
+          # latest diagnostic source-Cobalt Full/Lite and VM regression tests.
+          protected=' 45571393792 45655074267 45666392584 45675201979 45675916243 45680011746 45680011959 45735960651 45735833909 45735833896 '
+          removed=0
+          skipped=0
+          for id in 45735780697 45680011727 45679535331 45678607289 45676100622 45675361859 45675201595 45675201385 45667503452 45666392964 45666392576 45666321825 45666321637 45666321586 45655074170 45655074168; do
+            case "$protected" in
+              *" $id "*) echo "Protected run $id, refusing deletion"; exit 1;;
+            esac
+            if [ "$id" = "$GITHUB_RUN_ID" ]; then
+              echo "Refusing to delete this cleanup job"; exit 1
+            fi
+            metadata="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" --jq '.status + " " + (.conclusion // "")' 2>/dev/null || true)"
+            if [ -z "$metadata" ]; then
+              echo "Run $id already deleted or unavailable"
+              skipped=$((skipped+1))
+              continue
+            fi
+            case "$metadata" in
+              completed\ *) ;;
+              *) echo "Run $id is not completed: $metadata — STOP"; exit 1;;
+            esac
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$id" >/dev/null
+            echo "Deleted historical duplicate run $id"
+            removed=$((removed+1))
+          done
+          {
+            echo '## GitHub Actions cleanup'
+            echo "Deleted obsolete runs: $removed"
+            echo "Already missing: $skipped"
+            echo 'Preserved IDs: 45571393792, 45655074267, 45666392584, 45675201979, 45675916243, 45680011746, 45680011959, 45735960651, 45735833909, 45735833896'
+            echo 'Only completed, explicitly listed duplicates were removed.'
+            echo 'No GitHub releases or protected artifacts were changed.'
+          } >> "$GITHUB_STEP_SUMMARY"

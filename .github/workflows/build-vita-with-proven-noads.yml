@@ -1,16 +1,7 @@
 name: Build PS Vita crash fix with proven experimental NoAds Cobalt
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'experiments/cobalt/vita/port_virtual_memory.cpp'
-      - 'experiments/cobalt/vita/port_media_session.cpp'
-      - 'experiments/cobalt/vita/port_player.cpp'
-      - 'tools/test_sponsorblock_threading.cjs'
-      - 'tools/test_vm_data_mappings.cjs'
-      - '.github/workflows/build-vita-with-proven-noads.yml'
-      - '.github/workflows/build-vita.yml'
+  # Rebuild the verified NoAds runtime only on explicit request.
 permissions:
   contents: read
   actions: read
