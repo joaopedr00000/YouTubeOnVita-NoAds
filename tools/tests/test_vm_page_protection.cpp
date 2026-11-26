@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <map>
 #include <vector>
+#include <string>
+#include <cstring>
 #include <cstdio>
 #include <psp2/kernel/sysmem.h>
 #include <kubridge.h>
@@ -15,6 +17,7 @@ struct Block {void* data;uint32_t size;};
 struct Call {uintptr_t addr;uint32_t size;unsigned flags;int result;};
 std::map<SceUID,Block> blocks;
 std::vector<Call> calls;
+std::vector<std::string> vm_trace;
 int next_id=12;
 int forced_error=0;
 }
@@ -42,7 +45,10 @@ extern "C" int kuKernelMemProtect(void* addr,SceSize size,unsigned flags) {
   calls.push_back({(uintptr_t)addr,size,flags,forced_error});
   return forced_error;
 }
-extern "C" void SbLogRaw(const char*) {}
+extern "C" void SbLogRaw(const char* message) {
+  if(message && std::strncmp(message,"YTV_VM_TRACE_",13)==0)
+    vm_trace.emplace_back(message);
+}
 #include "../../experiments/cobalt/vita/port_virtual_memory.cpp"
 
 static void assert_call(size_t i,uintptr_t addr,uint32_t bytes,unsigned perm){
@@ -63,11 +69,18 @@ int main() {
   assert(ytv_memory_map_count()==1);
   assert(ytv_memory_map_bytes()==0x7f000);
   assert(calls.empty());
+  assert(!vm_trace.empty());
+  assert(vm_trace.back().find("YTV_VM_TRACE_508K_MAP")!=std::string::npos);
   // Pure data mappings never invoke kernel-protection code.
   assert(SbMemoryProtect((void*)(b+0x3000),0x10000,RW));
   assert(SbMemoryProtect((void*)(b+0x1000),0x4000,R));
   assert(calls.empty());
-
+  bool saw_data_protect=false;
+  for(const auto& line:vm_trace) {
+    if(line.find("YTV_VM_TRACE_PROTECT")!=std::string::npos &&
+       line.find("calls=0")!=std::string::npos) saw_data_protect=true;
+  }
+  assert(saw_data_protect && "RW and R requests must be recorded even without kernel calls");
   // JIT RX on page 2: one kernel call, and only page 2 is recorded.
   assert(SbMemoryProtect((void*)(b+0x2000),0x1000,RX));
   assert(calls.size()==1);
@@ -121,6 +134,13 @@ int main() {
   assert(SbMemoryUnmap((void*)(b+0x3000),0x7c000));
   assert(ytv_memory_map_count()==0);
   assert(blocks.empty());
+  bool saw_final_unmap=false;
+  for(const auto& line:vm_trace) {
+    if(line.find("YTV_VM_TRACE_UNMAP")!=std::string::npos &&
+       line.find("released=127")!=std::string::npos &&
+       line.find("result=0x0")!=std::string::npos) saw_final_unmap=true;
+  }
+  assert(saw_final_unmap && "Final unmap must retain page count after mapping reset");
 
   // Free all bitmap metadata on a direct full unmap, even after JIT work.
   void* const m2=SbMemoryMap(0x4000,RW,"JIT");
@@ -128,5 +148,5 @@ int main() {
   assert(SbMemoryProtect(m2,0x1000,RX));
   assert(SbMemoryUnmap(m2,0x4000));
   assert(blocks.empty());
-  std::puts("PASS: page-granular kernel protection, W^X, lifecycle and cleanup");
+  std::puts("PASS: per-page VM policy and 508KiB lifecycle trace");
 }

@@ -24,6 +24,10 @@ assert.match(unmap,/sceKernelFreeMemBlock\(/);
 assert.match(src,/YTV_VM_TRACE_508K_MAP/);
 assert.match(src,/YTV_VM_TRACE_UNMAP/);
 assert.match(src,/YTV_VM_TRACE_PROTECT/);
+assert.match(src,/released_before/);
+assert.match(src,/released_after=total_pages/);
+assert.match(src,/map_size==0x7f000u && within/);
+assert.match(src,/g_vm_trace_lines,1\)>320/);
 assert.match(src,/\(flags&kSbMemoryMapProtectExec\)\s*&&\s*\(flags&kSbMemoryMapProtectWrite\)/,
   'Reject writable/executable mappings');
 console.log('PASS: per-page JIT/kernel protection policy and redacted crash trace');

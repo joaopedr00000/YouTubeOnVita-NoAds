@@ -32,7 +32,10 @@ void create_log_dir_once(){
 bool always_logged(const char* m){
   return strncmp(m,"YTV_",4)!=0 || strncmp(m,"YTV_BREAK",9)==0 ||
          strncmp(m,"YTV_BACKTRACE",13)==0 || strncmp(m,"YTV_VGL_INIT",12)==0 ||
-         strncmp(m,"YTV_LIFECYCLE",13)==0;
+         strncmp(m,"YTV_LIFECYCLE",13)==0 ||
+         // Bounded crash metadata in this experimental branch; no verbose.txt
+         // required and no unrelated per-frame/storage verbose logging.
+         strncmp(m,"YTV_VM_TRACE_",sizeof("YTV_VM_TRACE_")-1)==0;
 }
 }
 
