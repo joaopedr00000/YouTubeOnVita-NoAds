@@ -1,0 +1,143 @@
+name: Experimental V8 single-threaded GC Cobalt + Vita VPKs (NO release)
+on:
+  push:
+    branches: ['experiments/v8-serial-gc']
+    paths:
+      - '.github/workflows/experiment-v8-serial-gc.yml'
+      - 'tools/experiments/patch_v8_serial_gc.py'
+      - 'tools/experiments/test_v8_serial_gc_patch.py'
+      - 'experiments/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cobalt-v8-serial-gc-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source-built-serial-gc:
+    if: github.repository == 'joaopedr00000/YouTubeOnVita-NoAds'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Vita port and GC source-only regression
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/experiments/patch_v8_serial_gc.py tools/experiments/test_v8_serial_gc_patch.py
+          python3 tools/experiments/test_v8_serial_gc_patch.py
+          node tools/test_cobalt_adblock.cjs
+          node tools/test_vm_data_mappings.cjs
+          node tools/test_sponsorblock_threading.cjs
+          node tools/test_fork_data_isolation.cjs
+          node tools/test_modifications_menu.cjs
+      - name: Free runner disk for pinned Cobalt toolchains
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h
+      - name: Fetch exact Cobalt 25.50 source and change ONLY V8 GC mode and existing ad filter
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch 25.lts.50 --single-branch https://github.com/youtube/cobalt.git cobalt-src
+          test "$(git -C cobalt-src rev-parse HEAD)" = 762d9bfda894dd22cc5d47200f9994c3027514eb
+          python3 tools/prepare_cobalt_adblock.py cobalt-src
+          python3 tools/experiments/patch_v8_serial_gc.py cobalt-src
+          git -C cobalt-src diff --check
+          git -C cobalt-src diff --name-only | sort | tee "$RUNNER_TEMP/changed-cobalt-files.txt"
+          printf '%s\n' cobalt/browser/web_module.cc cobalt/script/v8c/isolate_fellowship.cc > "$RUNNER_TEMP/expected-files.txt"
+          diff -u "$RUNNER_TEMP/expected-files.txt" "$RUNNER_TEMP/changed-cobalt-files.txt"
+          grep -Fq -- '"--single-threaded-gc"' cobalt-src/cobalt/script/v8c/isolate_fellowship.cc
+          grep -Fq -- '"--jitless"' cobalt-src/cobalt/script/v8c/isolate_fellowship.cc
+          git -C cobalt-src diff > "$RUNNER_TEMP/v8-serial-gc-and-adblock.patch"
+      - name: Build pinned Cobalt Evergreen ARM hard-float toolchain
+        working-directory: cobalt-src
+        run: |
+          set -euo pipefail
+          export SB_API_VERSION=15
+          docker compose build --pull --build-arg BASE_OS=docker.io/library/debian --build-arg BASE_OS_TAG=bookworm base
+          docker compose build build-base
+          docker compose build build-evergreen
+      - name: Compile source Cobalt 25 with V8 serial GC (normal JIT remains available)
+        working-directory: cobalt-src
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/code" -w /code -e PYTHONPATH=/code -e IS_CI=1 cobalt-build-evergreen bash -c '
+            set -euo pipefail
+            command -v python >/dev/null || ln -s "$(command -v python3)" /usr/local/bin/python
+            gn gen out/evergreen-arm-hardfp_serialgc --args="target_platform=\"evergreen-arm-hardfp\" target_cpu=\"arm\" target_os=\"linux\" build_with_separate_cobalt_toolchain=false use_asan=false sb_api_version=15 is_internal_build=false build_type=\"gold\""
+            ninja -C out/evergreen-arm-hardfp_serialgc -j 4 cobalt_install
+          '
+      - name: Generate loader-checked Cobalt image/profile and exact hash
+        run: |
+          set -euo pipefail
+          runtime=cobalt-src/out/evergreen-arm-hardfp_serialgc/install/lib/libcobalt.so
+          test -s "$runtime"
+          test -d cobalt-src/out/evergreen-arm-hardfp_serialgc/install/usr/share/cobalt
+          mkdir -p candidate
+          cp "$runtime" candidate/libcobalt.so
+          cp -a cobalt-src/out/evergreen-arm-hardfp_serialgc/install/usr/share/cobalt candidate/content
+          cp "$RUNNER_TEMP/v8-serial-gc-and-adblock.patch" candidate/
+          grep -aq -- '--single-threaded-gc' candidate/libcobalt.so
+          grep -aq 'ytv-adblock-preload.js' candidate/libcobalt.so
+          if echo '1aa4c117417f943e5f6595edcdf5ab462ab4f6e6f1074829bd3111538291a7c4  candidate/libcobalt.so' | sha256sum -c - >/dev/null 2>&1; then
+            echo 'ERROR: candidate is byte-identical to old runtime; GC modification not applied' >&2
+            exit 1
+          fi
+          python3 -m venv "$RUNNER_TEMP/profile-venv"
+          "$RUNNER_TEMP/profile-venv/bin/pip" install pyelftools==0.32
+          "$RUNNER_TEMP/profile-venv/bin/python" tools/prepare_vita_cobalt_profile.py candidate/libcobalt.so candidate/cobalt_candidate_profile.h
+          (cd candidate && sha256sum libcobalt.so > SHA256SUMS)
+          printf '%s\n' 'EXPERIMENTAL V8 single-threaded garbage collector; normal JIT remains configurable, existing AdBlock preload preserved. NOT hardware validated, NO public release.' > candidate/README.txt
+          cat candidate/SHA256SUMS
+      - name: Upload only the new experimental Cobalt profile/artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobalt-vita-candidate-input
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
+
+  build-experimental-vpks:
+    needs: source-built-serial-gc
+    uses: ./.github/workflows/build-vita.yml
+    with:
+      custom_cobalt: true
+
+  verify-test-vpks:
+    needs: [source-built-serial-gc, build-experimental-vpks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cobalt-vita-candidate-input
+          path: candidate
+      - uses: actions/download-artifact@v4
+        with:
+          name: YouTubeOnVita-experimental-cobalt-VPKs
+          path: packages
+      - name: Verify Full/Lite embed the exact GC-patched Cobalt bytes and fork title IDs
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,struct,zipfile,pathlib
+          cobalt=pathlib.Path('candidate/libcobalt.so').read_bytes()
+          expected=hashlib.sha256(cobalt).digest()
+          assert b'--single-threaded-gc' in cobalt
+          for variant,app_id in [('Full','YTVNX0001'),('Lite','YTVNX0002')]:
+            path=pathlib.Path('packages')/f'YouTube-{variant}.vpk'
+            assert path.is_file() and path.stat().st_size>1000000,path
+            with zipfile.ZipFile(path) as z:
+              assert z.testzip() is None
+              assert hashlib.sha256(z.read('libcobalt.so')).digest()==expected
+              sfo=z.read('sce_sys/param.sfo')
+              assert app_id.encode() in sfo,variant
+              assert b'00.03' in sfo,variant
+              assert len(z.read('eboot.bin'))>100000
+            print('PASS: candidate',variant,app_id)
+          PY
+          echo 'EXPERIMENT ONLY: separate Vita hardware tests still required; v0.0.3 public release remains unchanged.' >> "$GITHUB_STEP_SUMMARY"
