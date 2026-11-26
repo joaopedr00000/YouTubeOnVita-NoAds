@@ -1,0 +1,31 @@
+name: Vita per-page VM protection checks
+on:
+  push:
+    branches:
+      - main
+      - fix/vm-page-granular-kernel-protection
+    paths:
+      - experiments/cobalt/vita/port_virtual_memory.cpp
+      - tools/test_vm_data_mappings.cjs
+      - tools/tests/test_vm_page_protection.cpp
+      - tools/tests/vm_stubs/**
+      - .github/workflows/test-vita-vm-page-granular.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-vm-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate memory-map policy
+        run: node tools/test_vm_data_mappings.cjs
+      - name: Compile the actual Vita VM port against host kernel-call stubs
+        run: >
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread
+          -I tools/tests/vm_stubs
+          tools/tests/test_vm_page_protection.cpp
+          -o /tmp/ytv-vm-policy-test
+      - name: Exercise protection transitions and partial-unmap lifecycle
+        run: /tmp/ytv-vm-policy-test
