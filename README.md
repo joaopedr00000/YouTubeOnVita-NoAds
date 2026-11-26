@@ -90,7 +90,9 @@ _Unofficial client for PS Vita_
 
 | Version | Download | Memory | Recommended use |
 |:--|:--|:--|:--|
-> **Public beta v0.0.4-beta.1:** serial V8 garbage collection; the maintainer observed no crash during roughly 15 minutes of playback and video switching, but a definitive fix is **not confirmed**. [Release notes](RELEASE_NOTES_v0.0.4-beta.1.md). The previous [v0.0.3 prerelease](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/tag/v0.0.3) remains available.\n\n| **YouTube Full** | **[YouTube-Full-v0.0.4-beta.1.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.4-beta.1/YouTube-Full-v0.0.4-beta.1.vpk)** | Extended RAM | **Recommended:** more memory available to the player |
+> **Public beta v0.0.4-beta.1:** serial V8 garbage collection; the maintainer observed no crash during roughly 15 minutes of playback and video switching, but a definitive fix is **not confirmed**. [Release notes](RELEASE_NOTES_v0.0.4-beta.1.md). The previous [v0.0.3 prerelease](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/tag/v0.0.3) remains available.
+
+| **YouTube Full** | **[YouTube-Full-v0.0.4-beta.1.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.4-beta.1/YouTube-Full-v0.0.4-beta.1.vpk)** | Extended RAM | **Recommended:** more memory available to the player |
 | **YouTube Lite** | **[YouTube-Lite-v0.0.4-beta.1.vpk](https://github.com/joaopedr00000/YouTubeOnVita-NoAds/releases/download/v0.0.4-beta.1/YouTube-Lite-v0.0.4-beta.1.vpk)** | Normal RAM | Lower memory footprint, better coexistence with suspended applications |
 
 ### Requirements
