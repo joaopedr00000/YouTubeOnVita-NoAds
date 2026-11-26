@@ -1,9 +1,9 @@
 /*
  * Starboard 15 Vita virtual-memory mapping on sceKernelMemBlock/kubridge.
  *
- * Supports single-region allocations, page-aligned protect subranges, and
- * exact-size unmap. Partial unmap and cross-region unmap fail closed.
- * W^X enforced. Executable permission needs kubridge on hardware.
+ * Tracks page-aligned subranges within unsplittable Vita memory blocks.
+ * Partial unmaps remain physically backed until all pages are released.
+ * W^X enforced. Executable permission requires kubridge.
  */
 #include "starboard/memory.h"
 #include "starboard/log.h"
@@ -26,14 +26,15 @@ struct Mapping {
   SceUID memid;
   uint64_t requested;
   uint64_t aligned;
-  // Pages already returned by a partial SbMemoryUnmap (bit set = released).
-  // A Vita memblock cannot be split, so released pages are made inaccessible
-  // and the memblock is freed once every page has been released.
+  // Logical released pages; partial unmaps do not remove physical Vita pages.
   uint8_t* released;
   uint32_t released_pages;
-  // Set once any range of this mapping was made executable (V8 JIT code
-  // space). Only such mappings need real permission changes afterwards.
-  bool exec_used;
+  // Bitmap of individual pages on which kernel protection succeeded.
+  // Never touch unrelated data pages just because a neighbor became JIT RX.
+  // Retain history after RX->R->RW so later RW transitions are not skipped.
+  uint8_t* kernel_pages;
+  uint32_t kernel_page_count;
+  uint32_t map_id;
 };
 Mapping maps[kMaxMaps]={};
 pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
@@ -42,8 +43,8 @@ bool validate_flags(int flags,bool allow_exec) {
                   kSbMemoryMapProtectWrite|kSbMemoryMapProtectExec;
   // flags==0 is kSbMemoryMapProtectReserved: address space that is not
   // accessible until SbMemoryProtect() (Cobalt's musl allocator relies on it).
-  // Vita cannot reserve without committing, so it is backed by a memblock
-  // protected KU_KERNEL_PROT_NONE.
+  // Vita cannot reserve without committing; the port currently keeps
+  // reserved pages RW (known Starboard compatibility limitation).
   if((flags&~known)!=0)return false;
   if(!allow_exec && (flags&kSbMemoryMapProtectExec))return false;
   if((flags&kSbMemoryMapProtectWrite) && !(flags&kSbMemoryMapProtectRead))
@@ -58,12 +59,15 @@ unsigned prot(int flags) {
          ((flags&kSbMemoryMapProtectExec)?KU_KERNEL_PROT_EXEC:0u);
 }
 volatile int g_vm_log_lines=0;
+volatile int g_vm_trace_lines=0;
 void vm_log(const char* fmt,...) __attribute__((format(printf,1,2)));
 volatile int g_vm_fail_lines=0;
 void vm_log(const char* fmt,...){
   // Failures (YTV_LIFECYCLE_VM_*) have their own budget: the 400-line cap
   // used to be exhausted by routine map/unmap lines, hiding later failures.
-  if(strstr(fmt,"LIFECYCLE")){
+  if(strstr(fmt,"YTV_VM_TRACE")){
+    if(__sync_add_and_fetch(&g_vm_trace_lines,1)>1800)return;
+  } else if(strstr(fmt,"LIFECYCLE")){
     if(__sync_add_and_fetch(&g_vm_fail_lines,1)>200)return;
   } else if(__sync_add_and_fetch(&g_vm_log_lines,1)>400)return;
   char line[200];
@@ -128,18 +132,15 @@ void* SbMemoryMap(int64_t size_bytes,int flags,const char *name) {
   // requests as truly RO was therefore inconsistent: a later ReadWrite
   // commit would report success while leaving the page RO in the kernel.
   //
-  // Two hardware coredump fragments (November 2026) both show a Cobalt V8
-  // Data Abort (stop 0x30004, DFSR=7) on the same object word 0x8c644600,
-  // with r0=0x8c644601. This is not proof that initial RO caused the fault,
-  // but avoiding ALL initial data-page protection changes eliminates one
-  // plausible source of stale/inconsistent page-table state. Only mappings
-  // that become JIT EXEC are ever changed via kuKernelMemProtect (below).
+  // Three November 2026 Vita dumps show a read-side translation fault,
+  // DFSR=7, at Cobalt +0x95a194 within different live 0x7f000 memblocks.
+  // This is not proof of a permission fault or a confirmed fix.
   // Nothing in SbMemoryMap can request executable permission.
 
   pthread_mutex_lock(&lock);
   int index=-1;
   for(int i=0;i<kMaxMaps;i++)if(!maps[i].base){index=i;break;}
-  if(index>=0)maps[index]={base,uid,(uint64_t)size_bytes,size,nullptr,0,false};
+  if(index>=0)maps[index]={base,uid,(uint64_t)size_bytes,size,nullptr,0,nullptr,0,(uint32_t)num};
   pthread_mutex_unlock(&lock);
   if(index<0) {
     vm_log("YTV_LIFECYCLE_VM_MAP_FAIL n=%d reason=table_full\n",num);
@@ -147,6 +148,9 @@ void* SbMemoryMap(int64_t size_bytes,int flags,const char *name) {
     return SB_MEMORY_MAP_FAILED;
   }
   vm_log("YTV_VM_MAP n=%d base=%p size=%u flags=%d\n",num,base,(unsigned)size,flags);
+  if(size==0x7f000u)
+    vm_log("YTV_VM_TRACE_508K_MAP id=%u uid=0x%x base=%p bytes=%u flags=%d\n",
+           (unsigned)num,(unsigned)uid,base,(unsigned)size,flags);
   return base;
 }
 bool SbMemoryUnmap(void* address,int64_t size_bytes) {
@@ -170,13 +174,18 @@ bool SbMemoryUnmap(void* address,int64_t size_bytes) {
     return false;
   }
   Mapping& m=maps[index];
+  const uint32_t map_id=m.map_id;
+  const SceUID memid=m.memid;
+  const uintptr_t map_base=(uintptr_t)m.base;
+  const uint64_t map_size=m.aligned;
+  uint32_t repeated_releases=0;
   uint32_t total_pages=(uint32_t)(m.aligned/kPageSize);
   uint32_t first=(uint32_t)((begin-(uintptr_t)m.base)/kPageSize);
   uint32_t count=(uint32_t)(rounded/kPageSize);
   int result=0;
   if(first==0 && count==total_pages && m.released_pages==0) {
     result=sceKernelFreeMemBlock(m.memid);  // whole mapping at once
-    if(result>=0){free(m.released);m={};}
+    if(result>=0){free(m.released);free(m.kernel_pages);m={};}
   } else {
     if(!m.released) {
       m.released=(uint8_t*)calloc((total_pages+7)/8,1);
@@ -195,61 +204,115 @@ bool SbMemoryUnmap(void* address,int64_t size_bytes) {
         if(!(m.released[p/8]&(1u<<(p%8)))) {
           m.released[p/8]|=(uint8_t)(1u<<(p%8));
           m.released_pages++;
+        } else {
+          ++repeated_releases;
         }
       }
       if(m.released_pages==total_pages) {
         result=sceKernelFreeMemBlock(m.memid);
-        if(result>=0){free(m.released);m={};}
+        if(result>=0){free(m.released);free(m.kernel_pages);m={};}
       }
     }
   }
+  const uint32_t released_after=m.released_pages;
   pthread_mutex_unlock(&lock);
   vm_log("YTV_VM_UNMAP %p size=%lld pages=%u+%u/%u result=0x%x\n",address,
          (long long)size_bytes,first,count,total_pages,(unsigned)result);
+  if(map_size==0x7f000u || repeated_releases)
+    vm_log("YTV_VM_TRACE_UNMAP id=%u uid=0x%x base=%p addr=%p pages=%u+%u/%u released=%u duplicates=%u result=0x%x\n",
+           map_id,(unsigned)memid,(void*)map_base,address,first,count,total_pages,
+           released_after,repeated_releases,(unsigned)result);
   return result>=0;
 }
 bool SbMemoryProtect(void* address,int64_t size_bytes,int flags) {
-  if(flags&kSbMemoryMapProtectExec)
-    vm_log("YTV_VM_PROTECT_EXEC %p size=%lld flags=%d\n",address,(long long)size_bytes,flags);
   if(!address || size_bytes<=0 || !validate_flags(flags,true)){
-    vm_log("YTV_LIFECYCLE_VM_PROTECT_REJECT %p size=%lld flags=%d\n",address,(long long)size_bytes,flags);
+    vm_log("YTV_LIFECYCLE_VM_PROTECT_REJECT %p size=%lld flags=%d\n",
+           address,(long long)size_bytes,flags);
     return false;
   }
-  uintptr_t begin=(uintptr_t)address;
+  const uintptr_t begin=(uintptr_t)address;
   if(begin&(kPageSize-1))return false;
   uint64_t rounded=0;
   if(!safe_align(size_bytes,&rounded))return false;
   pthread_mutex_lock(&lock);
   bool within=false;
-  bool kernel=false;  // a real page-table change is needed
+  bool released_overlap=false;
+  int result=-1;
+  unsigned kernel_calls=0;
+  uint32_t map_id=0;
+  SceUID memid=0;
+  uintptr_t map_base=0;
+  uint32_t kernel_pages=0;
   for(int i=0;i<kMaxMaps;i++) {
     Mapping& m=maps[i];
     if(!m.base)continue;
-    uintptr_t b=(uintptr_t)m.base;
+    const uintptr_t b=(uintptr_t)m.base;
     if(begin>=b && (uint64_t)(begin-b)+rounded<=m.aligned) {
       within=true;
-      // Pages released by a partial unmap no longer exist for the caller.
+      map_id=m.map_id;
+      memid=m.memid;
+      map_base=b;
+      const uint32_t first=(uint32_t)((begin-b)/kPageSize);
+      const uint32_t count=(uint32_t)(rounded/kPageSize);
+      const uint32_t total_pages=(uint32_t)(m.aligned/kPageSize);
       if(m.released) {
-        uint32_t first=(uint32_t)((begin-b)/kPageSize);
-        for(uint32_t p=first;p<first+(uint32_t)(rounded/kPageSize);p++)
-          if(m.released[p/8]&(1u<<(p%8))){within=false;break;}
+        for(uint32_t p=first;p<first+count;p++) {
+          if(m.released[p/8]&(1u<<(p%8))) {
+            within=false;
+            released_overlap=true;
+            break;
+          }
+        }
       }
-      // Data mappings are RW for their whole life (see SbMemoryMap): commit
-      // (R/RW) and decommit (0) requests need no page-table change. Only
-      // JIT code mappings switch RW <-> RX for real.
-      if(within && (flags&kSbMemoryMapProtectExec)) m.exec_used=true;
-      kernel=within && m.exec_used && flags!=0;
+      if(!within)break;
+      result=0;
+      if(flags&kSbMemoryMapProtectExec) {
+        // Record a page ONLY after the kernel protection call succeeds.
+        if(!m.kernel_pages) {
+          m.kernel_pages=(uint8_t*)calloc((total_pages+7)/8,1);
+          if(!m.kernel_pages) {result=-2;break;}
+        }
+        ++kernel_calls;
+        result=kuKernelMemProtect(address,(SceSize)rounded,prot(flags));
+        if(result>=0) {
+          for(uint32_t p=first;p<first+count;p++) {
+            const uint8_t bit=(uint8_t)(1u<<(p%8));
+            if(!(m.kernel_pages[p/8]&bit)) {
+              m.kernel_pages[p/8]|=bit;
+              ++m.kernel_page_count;
+            }
+          }
+        }
+      } else if(flags!=0 && m.kernel_pages) {
+        // Reprotect ONLY pages previously changed by the kernel, never
+        // unrelated neighboring heap/data pages in this same memblock.
+        uint32_t p=first;
+        while(p<first+count) {
+          if(!(m.kernel_pages[p/8]&(1u<<(p%8)))) {++p;continue;}
+          const uint32_t first_touched=p++;
+          while(p<first+count && (m.kernel_pages[p/8]&(1u<<(p%8)))) ++p;
+          ++kernel_calls;
+          void* run=(void*)(b+(uintptr_t)first_touched*kPageSize);
+          const SceSize run_size=(SceSize)((p-first_touched)*kPageSize);
+          result=kuKernelMemProtect(run,run_size,prot(flags));
+          if(result<0)break;
+        }
+      }
+      // Reserved (flags==0) remains a no-op, as in the previous version.
+      kernel_pages=m.kernel_page_count;
       break;
     }
   }
-  // Data mappings: every request is acknowledged without touching the page
-  // tables (they stay RW). Mappings that held JIT code: R/RW/RX go to the
-  // kernel; decommit (0) is acknowledged, the pages stay mapped but unused.
-  int result=!within?-1:!kernel?0:kuKernelMemProtect(address,(SceSize)rounded,prot(flags));
   pthread_mutex_unlock(&lock);
   if(result<0)
-    vm_log("YTV_LIFECYCLE_VM_PROTECT_FAIL %p size=%lld flags=%d within=%d err=0x%x\n",address,(long long)size_bytes,flags,within,(unsigned)result);
-  return result>=0;
+    vm_log("YTV_LIFECYCLE_VM_PROTECT_FAIL %p size=%lld flags=%d within=%d released=%d err=0x%x\n",
+           address,(long long)size_bytes,flags,within?1:0,
+           released_overlap?1:0,(unsigned)result);
+  if(kernel_calls)
+    vm_log("YTV_VM_TRACE_PROTECT id=%u uid=0x%x block=%p range=%p+%u flags=%d calls=%u touched_pages=%u result=0x%x\n",
+           map_id,(unsigned)memid,(void*)map_base,address,(unsigned)rounded,
+           flags,kernel_calls,kernel_pages,(unsigned)result);
+  return within && result>=0;
 }
 } // extern C
 
